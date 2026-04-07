@@ -56,8 +56,8 @@ TOOLS: list[Tool] = [
             "Devuelve una lista de vuelos con aerolínea, horarios y precio estimado."
         ),
         parameters={
-            "origin": "string — código IATA del aeropuerto de origen (ej: MAD)",
-            "destination": "string — código IATA del aeropuerto de destino (ej: BCN)",
+            "origin": "string — nombre de la ciudad de origen",
+            "destination": "string — nombre de la ciudad de destino",
             "date": "string — fecha de salida en formato YYYY-MM-DD",
             "passengers": "int (opcional, default 1) — número de pasajeros",
         },
@@ -70,7 +70,7 @@ TOOLS: list[Tool] = [
             "Devuelve opciones con nombre, categoría, ubicación y precio por noche."
         ),
         parameters={
-            "city": "string — ciudad de destino (ej: Barcelona)",
+            "destination": "string — ciudad de destino (ej: Barcelona)",
             "check_in": "string — fecha de entrada YYYY-MM-DD",
             "check_out": "string — fecha de salida YYYY-MM-DD",
             "guests": "int (opcional, default 1) — número de huéspedes",
@@ -147,7 +147,8 @@ Final Answer: <respuesta completa, clara y bien formateada para el usuario>
 3. El JSON de Action Input debe ser válido. Usa comillas dobles.
 4. Si el usuario no proporciona algún dato necesario, pregúntale antes de llamar a la tool.
 5. Coordina las búsquedas de forma lógica: primero vuelos, luego hotel, luego transporte.
-6. En la Final Answer, presenta un resumen ejecutivo con las mejores opciones encontradas.
+6. Cuando ya tengas toda la información, devuelve la respuesta final de la siguiente forma:
+Final Answer: (resumen ejecutivo con las mejores opciones de vuelo, hotel y transporte).
 
 ## Tools disponibles
 
@@ -157,11 +158,11 @@ Final Answer: <respuesta completa, clara y bien formateada para el usuario>
 
 Thought: El usuario quiere volar de Madrid a Roma el 15 de junio. Primero buscaré vuelos.
 Action: search_flights
-Action Input: {{"origin": "MAD", "destination": "FCO", "date": "2025-06-15", "passengers": 1}}
+Action Input: {{"origin": "Madrid", "destination": "Roma", "date": "2025-06-15", "passengers": 1}}
 Observation: [resultado de la búsqueda de vuelos]
 Thought: Tengo los vuelos. Ahora busco hotel en Roma para esas fechas.
 Action: search_hotels
-Action Input: {{"city": "Roma", "check_in": "2025-06-15", "check_out": "2025-06-20", "guests": 1}}
+Action Input: {{"destination": "Roma", "check_in": "2025-06-15", "check_out": "2025-06-20", "guests": 1}}
 Observation: [resultado de hoteles]
 Thought: Ahora busco transporte del aeropuerto FCO al hotel seleccionado.
 Action: search_airport_transport
@@ -273,7 +274,7 @@ class TravelAgent:
     model_id: str = "google/gemma-4-E4B-it"
     max_iterations: int = 10
     temperature: float = 0.2
-    max_new_tokens: int = 512
+    max_new_tokens: int = 1000 # 512
 
     _messages: list[dict] = field(default_factory=list, init=False)
     _tokenizer: Any = field(default=None, init=False)
@@ -342,7 +343,7 @@ class TravelAgent:
 
             # 2. Parsear la respuesta
             step = parse_react_response(llm_response)
-            logger.info(f"Thought: {step.thought[:120]}...")
+            logger.info(f"Thought: {step.thought[:200]}...")
 
             # 3. Si hay Final Answer, terminamos
             if step.final_answer:
