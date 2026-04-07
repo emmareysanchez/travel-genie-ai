@@ -343,7 +343,7 @@ class TravelAgent:
 
             # 2. Parsear la respuesta
             step = parse_react_response(llm_response)
-            logger.info(f"Thought: {step.thought[:200]}...")
+            logger.info(f"Thought: {step.thought[:500]}...")
 
             # 3. Si hay Final Answer, terminamos
             if step.final_answer:
