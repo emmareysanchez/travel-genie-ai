@@ -2,7 +2,7 @@
 travel_agent.py
 ---------------
 Agente ReAct (Reasoning + Acting) para planificación de viajes.
-Modelo base: Google Gemma 4 (vía Ollama o API compatible OpenAI).
+Modelo base: Google Gemma 4 (importado con transformers)
 
 Arquitectura ReAct:
   THOUGHT → ACTION → OBSERVATION → THOUGHT → ... → FINAL ANSWER
@@ -17,13 +17,12 @@ import logging
 from typing import Any
 from dataclasses import dataclass, field
 
-# Cliente compatible OpenAI (Ollama expone este endpoint localmente)
-from openai import OpenAI
-
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
 # --- Importación lazy de tools (se registran dinámicamente) ---
-from tools.flight_search import search_flights
-from tools.hotel_search import search_hotels
-from tools.airport_transport import search_airport_transport
+from tools.flights import search_flights
+from tools.hotels import search_hotels
+from tools.transport import get_airport_to_hotel_transport
 
 # ---------------------------------------------------------------------------
 # Configuración de logging
@@ -90,7 +89,7 @@ TOOLS: list[Tool] = [
             "destination": "string — nombre del hotel o zona de destino",
             "datetime": "string — fecha y hora de llegada YYYY-MM-DD HH:MM",
         },
-        callable=search_airport_transport,
+        callable=get_airport_to_hotel_transport,
     ),
 ]
 
@@ -265,31 +264,59 @@ class TravelAgent:
     Agente ReAct para planificación de viajes.
 
     Atributos configurables:
-    - model: nombre del modelo en Ollama (ej: "gemma2:9b" o el identificador de Gemma 4)
-    - base_url: endpoint de Ollama (por defecto local)
-    - max_iterations: límite de ciclos Thought→Action→Observation para evitar bucles infinitos
-    - temperature: temperatura de generación del LLM
+    - model_id: identificador del modelo HF
+    - max_iterations: límite de ciclos Thought→Action→Observation
+    - temperature: se mantiene por compatibilidad, aunque con do_sample=False no se usa
+    - max_new_tokens: longitud máxima de generación
     """
-    model: str = "google/gemma-3-27b-it"   # ajusta al tag exacto de Gemma 4 en tu Ollama
-    base_url: str = "http://localhost:11434/v1"
-    max_iterations: int = 10
-    temperature: float = 0.2               # bajo para mayor determinismo en el razonamiento
 
-    # Historial de mensajes (se mantiene durante la conversación)
+    model_id: str = "google/gemma-4-E4B-it"
+    max_iterations: int = 10
+    temperature: float = 0.2
+    max_new_tokens: int = 512
+
     _messages: list[dict] = field(default_factory=list, init=False)
-    _client: Any = field(default=None, init=False) # cliente OpenAI para llamadas al LLM
+    _tokenizer: Any = field(default=None, init=False)
+    _model: Any = field(default=None, init=False)
+    _device: str = field(default="cuda" if torch.cuda.is_available() else "cpu", init=False)
 
     def __post_init__(self):
-        # Inicializamos el cliente OpenAI apuntando a Ollama
-        self._client = OpenAI(
-            base_url=self.base_url,
-            api_key="ollama",  # Ollama no requiere key real pero el cliente la exige
-        )
-        # Inyectamos el system prompt como primer mensaje
+        self._load_model()
+
         self._messages = [
             {"role": "system", "content": build_system_prompt()}
         ]
-        logger.info(f"TravelAgent inicializado | modelo: {self.model} | max_iter: {self.max_iterations}")
+
+        logger.info(
+            f"TravelAgent inicializado | modelo: {self.model_id} | "
+            f"device: {self._device} | max_iter: {self.max_iterations}"
+        )
+
+    # ------------------------------------------------------------------
+    # Carga del modelo
+    # ------------------------------------------------------------------
+
+    def _load_model(self):
+        logger.info(f"Cargando modelo desde Hugging Face: {self.model_id}")
+
+        self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+
+        if self._tokenizer.pad_token is None:
+            self._tokenizer.pad_token = self._tokenizer.eos_token
+
+        torch_dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+
+        self._model = AutoModelForCausalLM.from_pretrained(
+            self.model_id,
+            torch_dtype=torch_dtype,
+            device_map="auto" if torch.cuda.is_available() else None,
+        )
+
+        if not torch.cuda.is_available():
+            self._model.to(self._device)
+
+        self._model.eval()
+
 
     # ------------------------------------------------------------------
     # API pública
@@ -366,22 +393,46 @@ class TravelAgent:
 
     def _call_llm(self) -> str:
         """
-        Realiza la llamada al LLM con el historial actual.
-        Devuelve el texto de la respuesta o lanza excepción en caso de error.
+        Genera la respuesta del modelo usando apply_chat_template + generate,
+y devuelve el texto generado. Maneja errores de generación y decodificación.
         """
         try:
-            response = self._client.chat.completions.create(
-                model=self.model,
-                messages=self._messages,
-                temperature=self.temperature,
-                max_tokens=2048,
-                stop=["Observation:"],  # detenemos la generación cuando el LLM escribe "Observation:"
-                                        # así evitamos que el LLM se invente las observaciones
+            text_input = self._tokenizer.apply_chat_template(
+                self._messages,
+                tokenize=False,
+                add_generation_prompt=True,
             )
-            return response.choices[0].message.content.strip()
+
+            model_device = next(self._model.parameters()).device
+            enc = self._tokenizer(text_input, return_tensors="pt").to(model_device)
+
+            with torch.no_grad():
+                outputs = self._model.generate(
+                    **enc,
+                    max_new_tokens=self.max_new_tokens,
+                    do_sample=False,
+                    pad_token_id=self._tokenizer.pad_token_id,
+                    eos_token_id=self._tokenizer.eos_token_id,
+                )
+
+            gen = outputs[0][enc["input_ids"].shape[1]:]
+            response = self._tokenizer.decode(gen, skip_special_tokens=True).strip()
+
+            return self._truncate_before_observation(response)
+
         except Exception as e:
             logger.error(f"Error en llamada al LLM: {e}")
             raise
+
+    def _truncate_before_observation(self, text: str) -> str:
+        """
+        Si el LLM incluye un bloque de Observation en la misma generación, lo truncamos
+        (no queremos que el LLM se invente una observación, sino que el agente la añada después de ejecutar la tool).
+        """
+        match = re.search(r"\bObservation\s*:", text, re.I)
+        if match:
+            return text[:match.start()].strip()
+        return text
 
 
 # ---------------------------------------------------------------------------
