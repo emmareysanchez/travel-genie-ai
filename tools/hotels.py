@@ -1,14 +1,14 @@
 from data.mocks import MOCK_HOTELS
 
 
-def search_hotels(trip_request: dict) -> list:
+def search_hotels(city, check_in, check_out, guests) -> list:
     """
     Return matching mock hotels for the destination.
     """
     results = []
 
     for hotel in MOCK_HOTELS:
-        if hotel["destination"].lower() == trip_request["destination"].lower():
+        if hotel["city"].lower() == city.lower():
             results.append(hotel)
 
     return results
