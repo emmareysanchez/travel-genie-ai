@@ -90,6 +90,7 @@ def search_hotels(destination, check_in, check_out, guests=1) -> list:
     return results
 
 
+
 def select_best_hotel(hotels: list) -> dict | None:
     valid_hotels = [
         h for h in hotels

@@ -253,7 +253,7 @@ def get_hotel_coordinates(address: str) -> Coordinates:
 # ---------------------------------------------------------------------------
 def get_airport_to_hotel_transport(
     airport: str,
-    hotel: str,
+    hotel: dict,
     transport_type: str = "drive",
 ) -> RouteResult:
     """
@@ -261,7 +261,9 @@ def get_airport_to_hotel_transport(
 
     Args:
         airport:        Código IATA del aeropuerto de origen (p. ej. "MAD").
-        hotel:          Dirección completa del hotel de destino.
+        hotel:          Coordenadas del hotel de destino como diccionario con
+                        las claves "latitude" (float) y "longitude" (float).
+                        Ejemplo: {"latitude": 41.3851, "longitude": 2.1734}
         transport_type: Modo de transporte. Debe ser uno de los 17 valores
                         aceptados por Geoapify:
                           drive, light_truck, medium_truck, truck, heavy_truck,
@@ -277,16 +279,25 @@ def get_airport_to_hotel_transport(
           - duration_formatted (str)    tiempo en formato legible "Xh Ym"
           - transport_type    (str)     modo de transporte usado
           - origin            (dict)    {iata, latitude, longitude}
-          - destination       (dict)    {address, latitude, longitude}
+          - destination       (dict)    {latitude, longitude}
 
     Raises:
         InvalidTransportModeError: si `transport_type` no es válido.
         AirportNotFoundError:      si el código IATA no se encuentra.
-        HotelNotFoundError:        si la dirección no puede geocodificarse.
         RoutingError:              si la API de rutas no encuentra ruta.
         APIError:                  si ocurre cualquier otro error de API.
         ValueError:                si algún parámetro tiene formato incorrecto.
     """
+    # --- Validar coordenadas del hotel ---
+    try:
+        hotel_lat = float(hotel["latitude"])
+        hotel_lon = float(hotel["longitude"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            "El parámetro 'hotel' debe ser un diccionario con las claves "
+            f"'latitude' y 'longitude' de tipo numérico. Recibido: {hotel}"
+        ) from exc
+
     # --- Validar modo de transporte ---
     transport_type = transport_type.strip().lower()
     if transport_type not in VALID_TRANSPORT_MODES:
@@ -299,13 +310,10 @@ def get_airport_to_hotel_transport(
     # --- Obtener coordenadas del aeropuerto ---
     airport_coords = get_airport_coordinates(airport)
 
-    # --- Obtener coordenadas del hotel ---
-    hotel_coords = get_hotel_coordinates(hotel)
-
     # --- Llamar a la Routing API ---
     # Formato de waypoints: "lat,lon|lat,lon"
     origin_wp = f"{airport_coords['latitude']},{airport_coords['longitude']}"
-    dest_wp = f"{hotel_coords['latitude']},{hotel_coords['longitude']}"
+    dest_wp = f"{hotel_lat},{hotel_lon}"
     waypoints = f"{origin_wp}|{dest_wp}"
 
     params = urllib.parse.urlencode(
@@ -333,7 +341,8 @@ def get_airport_to_hotel_transport(
     if not results:
         raise RoutingError(
             f"Geoapify Routing no encontró ninguna ruta entre el aeropuerto "
-            f"'{airport}' y el hotel '{hotel}' usando el modo '{transport_type}'."
+            f"'{airport}' y el hotel en ({hotel_lat}, {hotel_lon}) "
+            f"usando el modo '{transport_type}'."
         )
 
     route = results[0]
@@ -361,9 +370,8 @@ def get_airport_to_hotel_transport(
             "longitude": airport_coords["longitude"],
         },
         "destination": {
-            "address": hotel,
-            "latitude": hotel_coords["latitude"],
-            "longitude": hotel_coords["longitude"],
+            "latitude": hotel_lat,
+            "longitude": hotel_lon,
         },
     }
 
@@ -376,11 +384,11 @@ if __name__ == "__main__":
 
     print("=== Transport Tool — ejemplo de uso ===\n")
 
-    # Ejemplo: vuelo a Madrid → hotel en el centro
+    # Ejemplo: vuelo a Madrid → hotel en el centro (coordenadas de Gran Vía 32)
     try:
         result = get_airport_to_hotel_transport(
             airport="MAD",
-            hotel="Gran Vía 32, 28013 Madrid, España",
+            hotel={"latitude": 40.4200, "longitude": -3.7025},
             transport_type="drive",
         )
 
