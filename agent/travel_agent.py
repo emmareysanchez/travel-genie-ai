@@ -23,6 +23,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from tools.flights import search_flights
 from tools.hotels import search_hotels
 from tools.transport import get_airport_to_hotel_transport
+from tools.places_of_interest import search_places_of_interest
 
 # ---------------------------------------------------------------------------
 # Configuración de logging
@@ -79,6 +80,7 @@ TOOLS: list[Tool] = [
         },
         callable=search_hotels,
     ),
+    
     Tool(
         name="search_airport_transport",
         description=(
@@ -93,6 +95,24 @@ TOOLS: list[Tool] = [
             "transport_type": "string (opcional, default 'drive') — modo de transporte: drive, bicycle, transit",
         },
         callable=get_airport_to_hotel_transport,
+    ),
+    Tool(
+        name="search_places_of_interest",
+        description=(
+            "Busca lugares de interés cercanos a una ubicación. "
+            "Puede usarse con una ciudad, una dirección o coordenadas 'lat,lon'. "
+            "Permite filtrar por categorías como museos, monumentos, restaurantes, "
+            "parques, bares, vida_nocturna, transporte, etc."
+        ),
+        parameters={
+            "location": "string — ciudad, dirección o coordenadas 'lat,lon'",
+            "interest_types": "list[string] — tipos de interés, por ejemplo ['museos', 'monumentos'] o ['restaurantes', 'bares']",
+            "radius_meters": "int (opcional, default 2000) — radio de búsqueda en metros",
+            "limit": "int (opcional, default 5) — número máximo de resultados",
+            "conditions": "list[string] (opcional) — filtros extra como ['wheelchair.yes'] o ['internet_access.free']",
+            "lang": "string (opcional, default 'es') — idioma de la respuesta",
+        },
+        callable=search_places_of_interest,
     ),
 ]
 
@@ -150,6 +170,9 @@ Final Answer: <respuesta completa, clara y bien formateada para el usuario>
      Después presenta las tres opciones al usuario para que elija la que prefiera.
    - Si el usuario SÍ especifica un tipo de transporte, realiza solo esa llamada.
 8. Cuando ya tengas toda la información, devuelve una respuesta final clara con la mejor combinación encontrada.
+    - mejor opción de vuelo
+    - opción de hotel recomendada
+    - 3 a 5 lugares de interés sugeridos
 
 ## Tools disponibles
 
@@ -166,6 +189,11 @@ Thought: Ahora busco hotel en Roma para esas fechas.
 Action: search_hotels
 Action Input: {{"destination": "Roma", "check_in": "2026-06-15", "check_out": "2026-06-20", "guests": 1}}
 Observation: [resultado de hoteles]
+
+Thought: Ahora busco lugares de interés cerca del centro de Roma.
+Action: search_places_of_interest
+Action Input: {{"location": "Roma, Italia", "interest_types": ["monumentos", "museos", "restaurantes"], "radius_meters": 3000, "limit": 5, "lang": "es"}}
+Observation: [resultado de lugares]
 
 Thought: El usuario no ha especificado tipo de transporte. Voy a llamar tres veces con drive, bicycle y transit.
 Action: search_airport_transport
