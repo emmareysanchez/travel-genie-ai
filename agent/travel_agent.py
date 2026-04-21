@@ -25,6 +25,7 @@ from tools.flights import search_flights
 from tools.hotels import search_hotels
 from tools.transport import get_airport_to_hotel_transport
 from tools.places_of_interest import search_places_of_interest
+from tools.food import suggest_food_web
 
 # ---------------------------------------------------------------------------
 # Configuración de logging
@@ -114,12 +115,25 @@ TOOLS: list[Tool] = [
         callable=get_airport_to_hotel_transport,
     ),
     Tool(
+        name="suggest_food_web",
+        description=(
+            "Devuelve una URL de TasteAtlas con los platos y restaurantes típicos "
+            "de la ciudad de destino. Úsala siempre al final, tras buscar vuelos, "
+            "hotel y lugares de interés."
+        ),
+        parameters={
+            "city": "string — nombre de la ciudad de destino en inglés y en minúsculas (ej: rome, barcelona, paris)",
+        },
+        callable=suggest_food_web,
+    ),
+    Tool(
         name="search_places_of_interest",
         description=(
             "Busca lugares de interés cercanos a una ubicación. "
             "Puede usarse con una ciudad, una dirección o coordenadas 'lat,lon'. "
             "Permite filtrar por categorías como museos, monumentos, restaurantes, "
             "parques, bares, vida_nocturna, transporte, etc."
+            "La categoría dada debe estar en español."
         ),
         parameters={
             "location": "string — ciudad, dirección o coordenadas 'lat,lon'",
@@ -140,17 +154,6 @@ TOOL_MAP: dict[str, Tool] = {t.name: t for t in TOOLS}
 # ---------------------------------------------------------------------------
 # 2. SYSTEM PROMPT
 # ---------------------------------------------------------------------------
-"""DEL SYSTEM PROMPT ME DA CONFLICTO ESTO QUE HE BORRADO:
-7. Para llamar a search_airport_transport:
-   - El primer parámetro ("airport") debe ser el código IATA del aeropuerto (3 letras, ej: FCO, BCN, MAD).
-   - El segundo parámetro ("hotel") debe ser un diccionario JSON con las claves "latitude" y "longitude"
-     usando los valores numéricos devueltos por search_hotels. Ejemplo: {"latitude": 41.3851, "longitude": 2.1734}
-   - El tercer parámetro ("transport_type") es el método de transporte deseado.
-   - Si el usuario NO especifica un tipo de transporte, llama a search_airport_transport TRES VECES:
-     primero con transport_type "drive", luego con "bicycle" y finalmente con "transit".
-     Después presenta las tres opciones al usuario para que elija la que prefiera.
-   - Si el usuario SÍ especifica un tipo de transporte, realiza solo esa llamada.
-"""
 def build_system_prompt() -> str:
     tools_docs = "\n\n".join(
         f"### Tool: `{t.name}`\n"
@@ -197,11 +200,13 @@ Final Answer: <respuesta completa, clara y bien formateada para el usuario>
      primero con transport_type "drive", luego con "bicycle" y finalmente con "transit".
      Después presenta las tres opciones al usuario para que elija la que prefiera.
    - Si el usuario SÍ especifica un tipo de transporte, realiza solo esa llamada.
-8. Cuando ya tengas toda la información, devuelve una respuesta final clara con la mejor combinación encontrada.
+8. Llama a suggest_food_web con el nombre de la ciudad destino en inglés y en minúsculas para obtener el enlace de gastronomía local. Inclúyelo siempre en la respuesta final.
+9. Cuando ya tengas toda la información, devuelve una respuesta final clara con la mejor combinación encontrada.
     - mejor opción de vuelo
     - opción de hotel recomendada
     - opción de transporte recomendada (si el usuario no especificó preferencia, elige la más rápida entre drive, bicycle y transit)
     - 3 a 5 lugares de interés sugeridos
+    - enlace de gastronomía local (TasteAtlas)
 
 ## Tools disponibles
 
@@ -240,10 +245,14 @@ Action Input: {{"location": "Roma, Italia", "interest_types": ["monumentos", "mu
 Observation: [resultado de lugares]
 
 
+Thought: Ahora obtengo el enlace de gastronomía local.
+Action: suggest_food_web
+Action Input: {{"city": "rome"}}
+Observation: [URL de TasteAtlas para Roma]
+
 Thought: Ya tengo toda la información. Voy a elaborar la respuesta final con las tres opciones de transporte.
 Final Answer: Aquí tienes tu plan de viaje completo con las opciones de transporte disponibles...
 """
-# YO HABIA BORRADO TODO LO DE LOS TRANSPORTES
 
 # ---------------------------------------------------------------------------
 # 3. PARSER DE RESPUESTAS ReAct
