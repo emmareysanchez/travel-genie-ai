@@ -36,7 +36,7 @@ def _get_destination_id(destination: str) -> str | None:
         f"{BASE_URL}/auto-complete",
         {"query": destination},
     )
-    logger.info(f"auto-complete response: {data}")
+    # logger.info(f"auto-complete response: {data}")
 
     results = data.get("data", [])
     if not results:

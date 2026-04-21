@@ -200,6 +200,7 @@ Final Answer: <respuesta completa, clara y bien formateada para el usuario>
 8. Cuando ya tengas toda la información, devuelve una respuesta final clara con la mejor combinación encontrada.
     - mejor opción de vuelo
     - opción de hotel recomendada
+    - opción de transporte recomendada (si el usuario no especificó preferencia, elige la más rápida entre drive, bicycle y transit)
     - 3 a 5 lugares de interés sugeridos
 
 ## Tools disponibles
@@ -218,11 +219,6 @@ Action: search_hotels
 Action Input: {{"destination": "Roma", "check_in": "2026-06-15", "check_out": "2026-06-20", "guests": 1}}
 Observation: [resultado de hoteles]
 
-Thought: Ahora busco lugares de interés cerca del centro de Roma.
-Action: search_places_of_interest
-Action Input: {{"location": "Roma, Italia", "interest_types": ["monumentos", "museos", "restaurantes"], "radius_meters": 3000, "limit": 5, "lang": "es"}}
-Observation: [resultado de lugares]
-
 Thought: El usuario no ha especificado tipo de transporte. Usaré las coordenadas del hotel devueltas por search_hotels y llamaré tres veces con drive, bicycle y transit.
 Action: search_airport_transport
 Action Input: {{"airport": "FCO", "hotel": {{"latitude": 41.8956, "longitude": 12.5113}}, "transport_type": "drive"}}
@@ -237,6 +233,12 @@ Thought: Ahora consulto la opción en transporte público.
 Action: search_airport_transport
 Action Input: {{"airport": "FCO", "hotel": {{"latitude": 41.8956, "longitude": 12.5113}}, "transport_type": "transit"}}
 Observation: [resultado de transporte público]
+
+Thought: Ahora busco lugares de interés cerca del centro de Roma.
+Action: search_places_of_interest
+Action Input: {{"location": "Roma, Italia", "interest_types": ["monumentos", "museos", "restaurantes"], "radius_meters": 3000, "limit": 5, "lang": "es"}}
+Observation: [resultado de lugares]
+
 
 Thought: Ya tengo toda la información. Voy a elaborar la respuesta final con las tres opciones de transporte.
 Final Answer: Aquí tienes tu plan de viaje completo con las opciones de transporte disponibles...
