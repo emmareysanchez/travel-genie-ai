@@ -300,7 +300,7 @@ class TravelAgent:
     def _load_model(self):
         logger.info(f"Cargando modelo desde Hugging Face: {self.model_id}")
 
-        self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        self._tokenizer = AutoTokenizer.from_pretrained(self.model_id, dtype="auto")
 
         if self._tokenizer.pad_token is None:
             self._tokenizer.pad_token = self._tokenizer.eos_token
