@@ -378,7 +378,6 @@ def search_places_of_interest(
     data = response.json()
     features = data.get("features", [])
 
-<<<<<<< HEAD
     return [_parse_feature(f) for f in features]
 
 if __name__ == "__main__":
@@ -395,6 +394,3 @@ if __name__ == "__main__":
             print(f"{place['name']} - {place['address']} (Distancia: {place['distance_meters']} m)")
     except Exception as e:
         print(f"Error: {e}")
-=======
-    return [_parse_feature(f) for f in features]
->>>>>>> 82cb8607f81b80519d927374c509e97da2414c42

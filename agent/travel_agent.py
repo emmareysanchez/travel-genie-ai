@@ -164,7 +164,7 @@ Final Answer: <respuesta completa, clara y bien formateada para el usuario>
 7. Para llamar a search_airport_transport:
    - El primer parámetro ("airport") debe ser el código IATA del aeropuerto (3 letras, ej: FCO, BCN, MAD).
    - El segundo parámetro ("hotel") debe ser un diccionario JSON con las claves "latitude" y "longitude"
-     usando los valores numéricos devueltos por search_hotels. Ejemplo: {"latitude": 41.3851, "longitude": 2.1734}
+     usando los valores numéricos devueltos por search_hotels. Ejemplo: {{"latitude": 41.3851, "longitude": 2.1734}}
    - El tercer parámetro ("transport_type") es el método de transporte deseado.
    - Si el usuario NO especifica un tipo de transporte, llama a search_airport_transport TRES VECES:
      primero con transport_type "drive", luego con "bicycle" y finalmente con "transit".
