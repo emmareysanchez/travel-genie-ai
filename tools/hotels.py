@@ -65,6 +65,7 @@ def search_hotels(destination, check_in, check_out, guests=1) -> list:
     )
 
     logger.info(f"search response keys: {list(data.keys())}")
+    logger.info(f"THIS IS DATA: {data}")
     hotels_raw = data.get("data", [])
 
     results = []
@@ -72,6 +73,7 @@ def search_hotels(destination, check_in, check_out, guests=1) -> list:
         try:
             name = h["name"]
             raw_address = h.get("address", "")
+            logger.info(f"Procesando hotel: {name} con dirección: {raw_address}")
             geocodable_address = ", ".join(
                 part.strip()
                 for part in [name, raw_address, destination]
