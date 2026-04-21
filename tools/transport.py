@@ -148,6 +148,9 @@ def get_airport_coordinates(iata_code: str) -> Coordinates:
         AirportNotFoundError: si la API no devuelve ningún aeropuerto.
         APIError: si ocurre un error de comunicación con la API.
     """
+    if not APININJAS_API_KEY or APININJAS_API_KEY == "TU_API_KEY_AQUI":
+        raise APIError("NINJA_API_KEY no configurada correctamente.")
+    
     iata_code = iata_code.strip().upper()
 
     if len(iata_code) != 3 or not iata_code.isalpha():
@@ -206,6 +209,9 @@ def get_hotel_coordinates(address: str) -> Coordinates:
         HotelNotFoundError: si la API no devuelve resultados.
         APIError: si ocurre un error de comunicación con la API.
     """
+    if not GEOAPIFY_API_KEY or GEOAPIFY_API_KEY == "TU_API_KEY_AQUI":
+        raise APIError("GEOAPIFY_API_KEY no configurada correctamente.")
+
     address = address.strip()
     if not address:
         raise ValueError("La dirección del hotel no puede estar vacía.")
@@ -248,7 +254,7 @@ def get_hotel_coordinates(address: str) -> Coordinates:
 def get_airport_to_hotel_transport(
     airport: str,
     hotel: str,
-    transport_type: str,
+    transport_type: str = "drive",
 ) -> RouteResult:
     """
     Calcula la ruta entre un aeropuerto y un hotel usando Geoapify Routing API.

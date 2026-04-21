@@ -53,12 +53,14 @@ TOOLS: list[Tool] = [
         name="search_flights",
         description=(
             "Busca vuelos disponibles entre un origen y un destino para una fecha dada. "
+            "Si se proporciona return_date, busca viaje de ida y vuelta. "
             "Devuelve una lista de vuelos con aerolínea, horarios y precio estimado."
         ),
         parameters={
             "origin": "string — nombre de la ciudad de origen",
             "destination": "string — nombre de la ciudad de destino",
             "date": "string — fecha de salida en formato YYYY-MM-DD",
+            "return_date": "string (opcional) — fecha de vuelta en formato YYYY-MM-DD",
             "passengers": "int (opcional, default 1) — número de pasajeros",
         },
         callable=search_flights,
@@ -67,7 +69,7 @@ TOOLS: list[Tool] = [
         name="search_hotels",
         description=(
             "Busca hoteles disponibles en una ciudad para un rango de fechas. "
-            "Devuelve opciones con nombre, categoría, ubicación y precio por noche."
+            "Devuelve opciones con nombre, rating, dirección geocodable y precio."
         ),
         parameters={
             "destination": "string — ciudad de destino (ej: Barcelona)",
@@ -80,14 +82,13 @@ TOOLS: list[Tool] = [
     Tool(
         name="search_airport_transport",
         description=(
-            "Busca opciones de transporte entre el aeropuerto de llegada y un hotel "
-            "o zona de la ciudad. Devuelve taxi, shuttle, metro u otras alternativas "
-            "con duración y coste estimado."
+            "Calcula una ruta entre el aeropuerto de llegada y la dirección del hotel. "
+            "Devuelve distancia y duración estimadas para un modo de transporte concreto."
         ),
         parameters={
             "airport": "string — código IATA del aeropuerto (ej: BCN)",
-            "destination": "string — nombre del hotel o zona de destino",
-            "datetime": "string — fecha y hora de llegada YYYY-MM-DD HH:MM",
+            "hotel": "string — dirección completa del hotel o dirección geocodable",
+            "transport_type": "string (opcional, default 'drive') — modo de transporte: drive, transit, walk, bicycle",
         },
         callable=get_airport_to_hotel_transport,
     ),
@@ -102,10 +103,6 @@ TOOL_MAP: dict[str, Tool] = {t.name: t for t in TOOLS}
 # ---------------------------------------------------------------------------
 
 def build_system_prompt() -> str:
-    """
-    Construye el system prompt que instruye al LLM a seguir el patrón ReAct.
-    Incluye la documentación de todas las tools disponibles.
-    """
     tools_docs = "\n\n".join(
         f"### Tool: `{t.name}`\n"
         f"**Descripción:** {t.description}\n"
@@ -114,41 +111,36 @@ def build_system_prompt() -> str:
         for t in TOOLS
     )
 
-    return f"""Eres un agente experto en planificación de viajes. Tu objetivo es ayudar al usuario \
-a organizar su viaje de forma completa: vuelos, alojamiento y transporte desde el aeropuerto.
+    return f"""Eres un agente experto en planificación de viajes. Tu objetivo es ayudar al usuario a organizar su viaje de forma completa: vuelos, alojamiento y transporte desde el aeropuerto.
 
 ## Instrucciones de razonamiento (ReAct)
 
 Debes razonar y actuar siguiendo ESTRICTAMENTE este formato en cada turno:
 
-```
 Thought: <tu razonamiento interno sobre qué necesitas hacer y por qué>
 Action: <nombre_exacto_de_la_tool>
 Action Input: <JSON válido con los parámetros de la tool>
-```
 
 Cuando recibas el resultado de una tool, éste aparecerá como:
-```
 Observation: <resultado de la tool>
-```
 
 Repite el ciclo Thought/Action/Action Input tantas veces como sea necesario.
+
 Cuando tengas TODA la información necesaria para responder al usuario, usa:
 
-```
 Thought: Ya tengo toda la información. Voy a elaborar la respuesta final.
 Final Answer: <respuesta completa, clara y bien formateada para el usuario>
-```
 
 ## Reglas importantes
 
 1. NUNCA inventes datos de vuelos, hoteles o transporte. Usa siempre las tools.
-2. Usa exactamente los nombres de tools indicados (search_flights, search_hotels, search_airport_transport).
+2. Usa exactamente los nombres de tools indicados.
 3. El JSON de Action Input debe ser válido. Usa comillas dobles.
 4. Si el usuario no proporciona algún dato necesario, pregúntale antes de llamar a la tool.
-5. Coordina las búsquedas de forma lógica: primero vuelos, luego hotel, luego transporte.
-6. Cuando ya tengas toda la información, devuelve la respuesta final de la siguiente forma:
-Final Answer: (resumen ejecutivo con las mejores opciones de vuelo, hotel y transporte).
+5. Busca primero vuelos, luego hotel y después transporte.
+6. Si el usuario proporciona fecha de vuelta, úsala en search_flights como return_date.
+7. Para search_airport_transport, usa la dirección geocodable del hotel en el campo hotel.
+8. Cuando ya tengas toda la información, devuelve una respuesta final clara con la mejor combinación encontrada.
 
 ## Tools disponibles
 
@@ -156,18 +148,21 @@ Final Answer: (resumen ejecutivo con las mejores opciones de vuelo, hotel y tran
 
 ## Ejemplo de flujo
 
-Thought: El usuario quiere volar de Madrid a Roma el 15 de junio. Primero buscaré vuelos.
+Thought: El usuario quiere viajar de Madrid a Roma del 15 al 20 de junio. Primero buscaré vuelos.
 Action: search_flights
-Action Input: {{"origin": "Madrid", "destination": "Roma", "date": "2025-06-15", "passengers": 1}}
+Action Input: {{"origin": "Madrid", "destination": "Roma", "date": "2026-06-15", "return_date": "2026-06-20", "passengers": 1}}
 Observation: [resultado de la búsqueda de vuelos]
-Thought: Tengo los vuelos. Ahora busco hotel en Roma para esas fechas.
+
+Thought: Ahora busco hotel en Roma para esas fechas.
 Action: search_hotels
-Action Input: {{"destination": "Roma", "check_in": "2025-06-15", "check_out": "2025-06-20", "guests": 1}}
+Action Input: {{"destination": "Roma", "check_in": "2026-06-15", "check_out": "2026-06-20", "guests": 1}}
 Observation: [resultado de hoteles]
-Thought: Ahora busco transporte del aeropuerto FCO al hotel seleccionado.
+
+Thought: Ahora calculo la ruta desde el aeropuerto al hotel.
 Action: search_airport_transport
-Action Input: {{"airport": "FCO", "destination": "Hotel Colosseo", "datetime": "2025-06-15 14:30"}}
+Action Input: {{"airport": "FCO", "hotel": "Hotel Colosseo, Roma, Italia", "transport_type": "drive"}}
 Observation: [resultado de transporte]
+
 Thought: Ya tengo toda la información. Voy a elaborar la respuesta final.
 Final Answer: Aquí tienes tu plan de viaje completo...
 """
@@ -186,35 +181,65 @@ class ReActStep:
     final_answer: str | None = None 
 
 
-def parse_react_response(text: str) -> ReActStep:
-    """
-    Parsea la salida del LLM buscando los bloques Thought / Action / Action Input
-    o Final Answer.
+def _extract_balanced_json(text: str, label: str = "Action Input") -> str | None:
+    marker = re.search(rf"{re.escape(label)}\s*:\s*", text, re.I)
+    if not marker:
+        return None
 
-    El parser es tolerante a variaciones menores de formato (espacios, mayúsculas).
-    """
+    start = text.find("{", marker.end())
+    if start == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+
+    for i in range(start, len(text)):
+        ch = text[i]
+
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+
+    return None
+
+
+def parse_react_response(text: str) -> ReActStep:
     step = ReActStep()
 
-    # Thought
-    thought_match = re.search(r"Thought\s*:\s*(.+?)(?=Action\s*:|Final Answer\s*:|$)", text, re.S | re.I)
+    thought_match = re.search(
+        r"Thought\s*:\s*(.+?)(?=Action\s*:|Final Answer\s*:|$)",
+        text,
+        re.S | re.I,
+    )
     if thought_match:
         step.thought = thought_match.group(1).strip()
 
-    # Final Answer (tiene prioridad sobre Action si ambos aparecen)
     final_match = re.search(r"Final Answer\s*:\s*(.+)", text, re.S | re.I)
     if final_match:
         step.final_answer = final_match.group(1).strip()
         return step
 
-    # Action
     action_match = re.search(r"Action\s*:\s*(\w+)", text, re.I)
     if action_match:
         step.action = action_match.group(1).strip()
 
-    # Action Input — extrae el primer bloque JSON válido
-    input_match = re.search(r"Action Input\s*:\s*(\{.*?\})", text, re.S | re.I)
-    if input_match:
-        raw_json = input_match.group(1).strip()
+    raw_json = _extract_balanced_json(text, "Action Input")
+    if raw_json:
         try:
             step.action_input = json.loads(raw_json)
         except json.JSONDecodeError as e:
@@ -272,9 +297,9 @@ class TravelAgent:
     """
 
     model_id: str = "google/gemma-4-E4B-it"
-    max_iterations: int = 10
+    max_iterations: int = 6 # 10
     temperature: float = 0.2
-    max_new_tokens: int = 1000 # 512
+    max_new_tokens: int = 400 # 1000 / 512
 
     _messages: list[dict] = field(default_factory=list, init=False)
     _tokenizer: Any = field(default=None, init=False)
@@ -300,7 +325,7 @@ class TravelAgent:
     def _load_model(self):
         logger.info(f"Cargando modelo desde Hugging Face: {self.model_id}")
 
-        self._tokenizer = AutoTokenizer.from_pretrained(self.model_id, dtype="auto")
+        self._tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
         if self._tokenizer.pad_token is None:
             self._tokenizer.pad_token = self._tokenizer.eos_token
@@ -317,7 +342,6 @@ class TravelAgent:
             self._model.to(self._device)
 
         self._model.eval()
-
 
     # ------------------------------------------------------------------
     # API pública
@@ -359,9 +383,16 @@ class TravelAgent:
 
                 # Añadimos el turno del asistente y la observación al historial
                 self._messages.append({"role": "assistant", "content": llm_response})
+                extra_note = ""
+                if isinstance(observation, str) and observation.startswith("[ERROR]"):
+                    extra_note = (
+                        "\nSi el error es de parámetros, corrige Action Input. "
+                        "Si falta información del usuario, pregúntala antes de seguir."
+                    )
+
                 self._messages.append({
                     "role": "user",
-                    "content": f"Observation: {observation}"
+                    "content": f"Observation: {observation}{extra_note}"
                 })
             else:
                 # El LLM no siguió el formato esperado
