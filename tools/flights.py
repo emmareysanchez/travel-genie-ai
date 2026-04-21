@@ -39,7 +39,7 @@ import logging
 load_dotenv()
 
 
-SERPAPI_URL = "https://serpapi.com/search"
+SERPAPI_URL = "https://serpapi.com/search.json"
 SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
 SERPAPI_TIMEOUT = int(os.getenv("SERPAPI_TIMEOUT", "20"))
 SERPAPI_CURRENCY = os.getenv("SERPAPI_CURRENCY", "EUR")
@@ -198,3 +198,20 @@ def select_best_flight(flights: list) -> dict | None:
         return None
 
     return min(flights, key=lambda x: x["price"])
+
+
+if __name__ == "__main__":
+    # Prueba de ejemplo para verificar que la API funciona correctamente.
+    origin = "Madrid"
+    destination = "París"
+    date = "2026-12-15"
+    passengers = 1
+
+    try:
+        flights = search_flights(origin, destination, date, passengers)
+        best_flight = select_best_flight(flights)
+
+        print(f"Mejor vuelo encontrado de {origin} a {destination} el {date}:")
+        print(best_flight)
+    except Exception as e:
+        print(f"Error buscando vuelos: {e}")

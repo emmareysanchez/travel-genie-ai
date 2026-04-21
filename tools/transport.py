@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 # Puedes definirlas directamente aquí o como variables de entorno.
 # ---------------------------------------------------------------------------
 load_dotenv()
-APININJAS_API_KEY: str = os.getenv("APININJAS_API_KEY", "TU_API_KEY_AQUI")
+APININJAS_API_KEY: str = os.getenv("NINJA_API_KEY", "TU_API_KEY_AQUI")
 GEOAPIFY_API_KEY: str = os.getenv("GEOAPIFY_API_KEY", "TU_API_KEY_AQUI")
 
 # ---------------------------------------------------------------------------
