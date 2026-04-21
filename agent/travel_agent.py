@@ -296,7 +296,8 @@ class TravelAgent:
     - max_new_tokens: longitud máxima de generación
     """
 
-    model_id: str = "google/gemma-4-E4B-it"
+    # model_id: str = "google/gemma-4-E4B-it"
+    model_id: str = "Qwen/Qwen2.5-3B-Instruct" # "google/gemma-4-E4B-it"
     max_iterations: int = 6 # 10
     temperature: float = 0.2
     max_new_tokens: int = 400 # 1000 / 512
