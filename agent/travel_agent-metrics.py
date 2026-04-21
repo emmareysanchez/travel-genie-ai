@@ -14,9 +14,10 @@ observa el resultado y repite hasta tener respuesta completa.
 import json
 import re
 import logging
-import time
 from typing import Any
 from dataclasses import dataclass, field
+
+from metrics import EvalSession, EvalResult
 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -82,33 +83,17 @@ TOOLS: list[Tool] = [
         callable=search_hotels,
     ),
     
-    # Tool(
-    #     name="search_airport_transport",
-    #     description=(
-    #         "Calcula una ruta entre el aeropuerto de llegada y la dirección del hotel. "
-    #         "Devuelve distancia y duración estimadas para un modo de transporte concreto. "
-    #         "Si el usuario no especifica un tipo de transporte, llama esta función TRES VECES "
-    #         "con los modos 'drive', 'bicycle' y 'transit' respectivamente, y presenta las tres opciones."
-    #     ),
-    #     parameters={
-    #         "airport": "string — código IATA del aeropuerto (ej: BCN, MAD, JFK)",
-    #         "hotel": "string — dirección completa del hotel (calle, número, ciudad, país)",
-    #         "transport_type": "string (opcional, default 'drive') — modo de transporte: drive, bicycle, transit",
-    #     },
-    #     callable=get_airport_to_hotel_transport,
-    # ),
-# YO ESTA TOOL LA TENIA COMENTADA POR ESO ESTA ASI ARRIBA
     Tool(
         name="search_airport_transport",
         description=(
-            "Calcula una ruta entre el aeropuerto de llegada y el hotel. "
+            "Calcula una ruta entre el aeropuerto de llegada y la dirección del hotel. "
             "Devuelve distancia y duración estimadas para un modo de transporte concreto. "
             "Si el usuario no especifica un tipo de transporte, llama esta función TRES VECES "
             "con los modos 'drive', 'bicycle' y 'transit' respectivamente, y presenta las tres opciones."
         ),
         parameters={
             "airport": "string — código IATA del aeropuerto (ej: BCN, MAD, JFK)",
-            "hotel": "dict — coordenadas del hotel con las claves 'latitude' (float) y 'longitude' (float). Ejemplo: {\"latitude\": 41.3851, \"longitude\": 2.1734}. Usa los valores de 'latitude' y 'longitude' devueltos por search_hotels.",
+            "hotel": "string — dirección completa del hotel (calle, número, ciudad, país)",
             "transport_type": "string (opcional, default 'drive') — modo de transporte: drive, bicycle, transit",
         },
         callable=get_airport_to_hotel_transport,
@@ -140,17 +125,7 @@ TOOL_MAP: dict[str, Tool] = {t.name: t for t in TOOLS}
 # ---------------------------------------------------------------------------
 # 2. SYSTEM PROMPT
 # ---------------------------------------------------------------------------
-"""DEL SYSTEM PROMPT ME DA CONFLICTO ESTO QUE HE BORRADO:
-7. Para llamar a search_airport_transport:
-   - El primer parámetro ("airport") debe ser el código IATA del aeropuerto (3 letras, ej: FCO, BCN, MAD).
-   - El segundo parámetro ("hotel") debe ser un diccionario JSON con las claves "latitude" y "longitude"
-     usando los valores numéricos devueltos por search_hotels. Ejemplo: {"latitude": 41.3851, "longitude": 2.1734}
-   - El tercer parámetro ("transport_type") es el método de transporte deseado.
-   - Si el usuario NO especifica un tipo de transporte, llama a search_airport_transport TRES VECES:
-     primero con transport_type "drive", luego con "bicycle" y finalmente con "transit".
-     Después presenta las tres opciones al usuario para que elija la que prefiera.
-   - Si el usuario SÍ especifica un tipo de transporte, realiza solo esa llamada.
-"""
+
 def build_system_prompt() -> str:
     tools_docs = "\n\n".join(
         f"### Tool: `{t.name}`\n"
@@ -188,7 +163,14 @@ Final Answer: <respuesta completa, clara y bien formateada para el usuario>
 4. Si el usuario no proporciona algún dato necesario, pregúntale antes de llamar a la tool.
 5. Busca primero vuelos, luego hotel y después transporte.
 6. Si el usuario proporciona fecha de vuelta, úsala en search_flights como return_date.
-7. Cuando ya tengas toda la información, devuelve una respuesta final clara con la mejor combinación encontrada.
+7. Para llamar a search_airport_transport:
+   - El primer parámetro ("airport") debe ser el código IATA del aeropuerto (3 letras, ej: FCO, BCN, MAD).
+   - El segundo parámetro ("hotel") debe ser la dirección COMPLETA del hotel: calle, número, ciudad y país.
+   - El tercer parámetro ("transport_type") es el método de transporte deseado.
+   - Si el usuario NO especifica un tipo de transporte, llama a search_airport_transport TRES VECES:
+     primero con transport_type "drive", luego con "bicycle" y finalmente con "transit".
+     Después presenta las tres opciones al usuario para que elija la que prefiera.
+   - Si el usuario SÍ especifica un tipo de transporte, realiza solo esa llamada.
 8. Cuando ya tengas toda la información, devuelve una respuesta final clara con la mejor combinación encontrada.
     - mejor opción de vuelo
     - opción de hotel recomendada
@@ -198,7 +180,7 @@ Final Answer: <respuesta completa, clara y bien formateada para el usuario>
 
 {tools_docs}
 
-## Ejemplo de flujo
+## Ejemplo de flujo (sin tipo de transporte especificado)
 
 Thought: El usuario quiere viajar de Madrid a Roma del 15 al 20 de junio. Primero buscaré vuelos.
 Action: search_flights
@@ -215,25 +197,25 @@ Action: search_places_of_interest
 Action Input: {{"location": "Roma, Italia", "interest_types": ["monumentos", "museos", "restaurantes"], "radius_meters": 3000, "limit": 5, "lang": "es"}}
 Observation: [resultado de lugares]
 
-Thought: El usuario no ha especificado tipo de transporte. Usaré las coordenadas del hotel devueltas por search_hotels y llamaré tres veces con drive, bicycle y transit.
+Thought: El usuario no ha especificado tipo de transporte. Voy a llamar tres veces con drive, bicycle y transit.
 Action: search_airport_transport
-Action Input: {{"airport": "FCO", "hotel": {{"latitude": 41.8956, "longitude": 12.5113}}, "transport_type": "drive"}}
+Action Input: {{"airport": "FCO", "hotel": "Via Labicana 144, 00184 Roma, Italia", "transport_type": "drive"}}
 Observation: [resultado de transporte en coche]
 
 Thought: Ahora consulto la opción en bicicleta.
 Action: search_airport_transport
-Action Input: {{"airport": "FCO", "hotel": {{"latitude": 41.8956, "longitude": 12.5113}}, "transport_type": "bicycle"}}
+Action Input: {{"airport": "FCO", "hotel": "Via Labicana 144, 00184 Roma, Italia", "transport_type": "bicycle"}}
 Observation: [resultado de transporte en bicicleta]
 
 Thought: Ahora consulto la opción en transporte público.
 Action: search_airport_transport
-Action Input: {{"airport": "FCO", "hotel": {{"latitude": 41.8956, "longitude": 12.5113}}, "transport_type": "transit"}}
+Action Input: {{"airport": "FCO", "hotel": "Via Labicana 144, 00184 Roma, Italia", "transport_type": "transit"}}
 Observation: [resultado de transporte público]
 
 Thought: Ya tengo toda la información. Voy a elaborar la respuesta final con las tres opciones de transporte.
 Final Answer: Aquí tienes tu plan de viaje completo con las opciones de transporte disponibles...
 """
-# YO HABIA BORRADO TODO LO DE LOS TRANSPORTES
+
 
 # ---------------------------------------------------------------------------
 # 3. PARSER DE RESPUESTAS ReAct
@@ -247,11 +229,7 @@ class ReActStep:
     action_input: dict | None = None
     final_answer: str | None = None 
 
-@dataclass
-class TraceEvent:
-    type: str
-    content: str 
-    
+
 def _extract_balanced_json(text: str, label: str = "Action Input") -> str | None:
     marker = re.search(rf"{re.escape(label)}\s*:\s*", text, re.I)
     if not marker:
@@ -323,70 +301,6 @@ def parse_react_response(text: str) -> ReActStep:
 # ---------------------------------------------------------------------------
 # 4. EXECUTOR DE TOOLS
 # ---------------------------------------------------------------------------
-def _compact_result(result):
-    if isinstance(result, list):
-        result = result[:5]
-        compact = []
-        for item in result:
-            if not isinstance(item, dict):
-                compact.append(item)
-                continue
-
-            compact.append({
-                k: item.get(k)
-                for k in [
-                    "airline",
-                    "origin",
-                    "destination",
-                    "departure_date",
-                    "return_date",
-                    "departure_time",
-                    "arrival_time",
-                    "price",
-                    "arrival_airport",
-                    "duration",
-                    "stops",
-                    "name",
-                    "price_per_night",
-                    "rating",
-                    "address",
-                    "distance_meters",
-                    "categories",
-                    "duration_formatted",
-                    "transport_type",
-                ]
-                if k in item
-            })
-        return compact
-
-    if isinstance(result, dict):
-        return {
-            k: result.get(k)
-            for k in [
-                "airline",
-                "origin",
-                "destination",
-                "departure_date",
-                "return_date",
-                "departure_time",
-                "arrival_time",
-                "price",
-                "arrival_airport",
-                "duration",
-                "stops",
-                "name",
-                "price_per_night",
-                "rating",
-                "address",
-                "distance_meters",
-                "categories",
-                "duration_formatted",
-                "transport_type",
-            ]
-            if k in result
-        }
-
-    return result
 
 def execute_tool(step: ReActStep) -> str:
     """
@@ -406,8 +320,7 @@ def execute_tool(step: ReActStep) -> str:
         result = tool.callable(**params)
         # Serializamos el resultado a JSON para que el LLM lo procese fácilmente
         if isinstance(result, (dict, list)):
-            compact = _compact_result(result)
-            return json.dumps(compact, ensure_ascii=False, separators=(",", ":"))
+            return json.dumps(result, ensure_ascii=False, indent=2)
         return str(result)
     except TypeError as e:
         return f"[ERROR] Parámetros incorrectos para '{tool_name}': {e}"
@@ -434,14 +347,21 @@ class TravelAgent:
 
     # model_id: str = "google/gemma-4-E4B-it"
     model_id: str = "Qwen/Qwen2.5-3B-Instruct" # "google/gemma-4-E4B-it"
-    max_iterations: int = 6 # vuelos(1) + hotel(1) + transporte×3(3) + razonamiento intermedio
+    max_iterations: int = 9 # vuelos(1) + hotel(1) + transporte×3(3) + razonamiento intermedio
     temperature: float = 0.2
-    max_new_tokens: int = 220 # 400 # 1000 / 512
+    max_new_tokens: int = 600 # 400 # 1000 / 512
 
     _messages: list[dict] = field(default_factory=list, init=False)
     _tokenizer: Any = field(default=None, init=False)
     _model: Any = field(default=None, init=False)
     _device: str = field(default="cuda" if torch.cuda.is_available() else "cpu", init=False)
+
+    # Estado interno para métricas: acumulamos candidatos y selección
+    # durante el bucle ReAct para pasárselos a EvalSession al final.
+    _last_flights: list[dict] = field(default_factory=list, init=False)
+    _last_hotels: list[dict] = field(default_factory=list, init=False)
+    _selected_flight: dict | None = field(default=None, init=False)
+    _selected_hotel: dict | None = field(default=None, init=False)
 
     def __post_init__(self):
         self._load_model()
@@ -484,59 +404,77 @@ class TravelAgent:
     # API pública
     # ------------------------------------------------------------------
 
-    def chat(self, user_message: str) -> dict:
+    def chat(self, user_message: str, eval_session: EvalSession | None = None) -> str:
+        """
+        Punto de entrada principal. Recibe el mensaje del usuario y ejecuta
+        el bucle ReAct hasta obtener una Final Answer o alcanzar max_iterations.
+
+        Parámetros
+        ----------
+        user_message  : mensaje del usuario
+        eval_session  : sesión de evaluación opcional (de metrics.py).
+                        Si se pasa, el agente registra automáticamente tokens,
+                        iteraciones, tool calls y la selección final.
+
+        Returns:
+            La respuesta final para mostrar al usuario.
+        """
         logger.info(f"Usuario: {user_message}")
         self._messages.append({"role": "user", "content": user_message})
 
-        trace: list[dict] = []
+        # Resetear estado de candidatos para esta sesión
+        self._last_flights = []
+        self._last_hotels = []
+        self._selected_flight = None
+        self._selected_hotel = None
 
         for iteration in range(1, self.max_iterations + 1):
             logger.info(f"--- Iteración ReAct {iteration}/{self.max_iterations} ---")
-            trace.append({
-                "type": "status",
-                "content": f"Iteración {iteration}/{self.max_iterations}"
-            })
 
+            # ── Métrica: contar iteración ─────────────────────────────────────
+            if eval_session:
+                eval_session.record_iteration()
+
+            # 1. Llamada al LLM
             llm_response = self._call_llm()
+            logger.debug(f"LLM raw response:\n{llm_response}")
+
+            # ── Métrica: contar tokens generados ──────────────────────────────
+            if eval_session:
+                tokens = len(self._tokenizer.encode(llm_response, add_special_tokens=False))
+                eval_session.record_tokens(tokens)
+
+            # 2. Parsear la respuesta
             step = parse_react_response(llm_response)
+            logger.info(f"Thought: {step.thought[:2500]}...")
 
-            if step.thought:
-                logger.info(f"Thought: {step.thought[:500]}...")
-                trace.append({
-                    "type": "thought",
-                    "content": step.thought
-                })
-
+            # 3. Si hay Final Answer, terminamos
             if step.final_answer:
                 logger.info("Final Answer recibida. Fin del bucle ReAct.")
                 self._messages.append({"role": "assistant", "content": llm_response})
 
-                trace.append({
-                    "type": "final_answer",
-                    "content": step.final_answer
-                })
+                # ── Métrica: registrar respuesta final y candidatos ───────────
+                if eval_session:
+                    eval_session.record_final_answer(step.final_answer)
+                    eval_session.record_candidates(self._last_flights, self._last_hotels)
+                    eval_session.record_selection(self._selected_flight, self._selected_hotel)
 
-                return {
-                    "final_answer": step.final_answer,
-                    "trace": trace
-                }
+                return step.final_answer
 
+            # 4. Si hay una Action, ejecutamos la tool
             if step.action:
-                trace.append({
-                    "type": "action",
-                    "content": f"{step.action} | input={json.dumps(step.action_input or {}, ensure_ascii=False)}"
-                })
-
                 observation = execute_tool(step)
                 logger.info(f"Observation ({step.action}): {observation[:200]}...")
 
-                trace.append({
-                    "type": "observation",
-                    "content": observation[:1000]
-                })
+                # ── Métrica: registrar tool call ──────────────────────────────
+                if eval_session:
+                    eval_session.record_tool_call(observation)
 
+                # Guardar candidatos cuando el agente llame a search_flights/hotels
+                self._store_candidates(step.action, observation)
+
+                # Añadimos el turno del asistente y la observación al historial
                 self._messages.append({"role": "assistant", "content": llm_response})
-
                 extra_note = ""
                 if isinstance(observation, str) and observation.startswith("[ERROR]"):
                     extra_note = (
@@ -549,12 +487,8 @@ class TravelAgent:
                     "content": f"Observation: {observation}{extra_note}"
                 })
             else:
+                # El LLM no siguió el formato esperado
                 logger.warning("No se detectó Action ni Final Answer. Pidiendo al LLM que continúe.")
-                trace.append({
-                    "type": "warning",
-                    "content": "El modelo no devolvió Action ni Final Answer."
-                })
-
                 self._messages.append({"role": "assistant", "content": llm_response})
                 self._messages.append({
                     "role": "user",
@@ -564,21 +498,13 @@ class TravelAgent:
                     )
                 })
 
+        # Límite de iteraciones alcanzado
         fallback = (
             "Lo siento, no he podido completar la planificación del viaje en el número "
             "máximo de pasos. Por favor, intenta con una consulta más específica."
         )
         logger.error("max_iterations alcanzado sin Final Answer.")
-
-        trace.append({
-            "type": "error",
-            "content": fallback
-        })
-
-        return {
-            "final_answer": fallback,
-            "trace": trace
-        }
+        return fallback
 
     def reset(self):
         """Reinicia el historial de conversación manteniendo el system prompt."""
@@ -588,6 +514,34 @@ class TravelAgent:
     # ------------------------------------------------------------------
     # Métodos internos
     # ------------------------------------------------------------------
+
+    def _store_candidates(self, tool_name: str, observation: str):
+        """
+        Parsea la observación de search_flights / search_hotels y guarda
+        los candidatos y la selección (mejor opción) para las métricas.
+        Falla silenciosamente si la observación no es JSON válido.
+        """
+        if observation.startswith("[ERROR]"):
+            return
+        try:
+            data = json.loads(observation)
+        except (json.JSONDecodeError, ValueError):
+            return
+
+        if tool_name == "search_flights" and isinstance(data, list):
+            self._last_flights = data
+            # Selección: vuelo más barato con precio válido
+            valid = [f for f in data if isinstance(f.get("price"), (int, float))]
+            self._selected_flight = min(valid, key=lambda x: x["price"]) if valid else None
+
+        elif tool_name == "search_hotels" and isinstance(data, list):
+            self._last_hotels = data
+            # Selección: mejor ratio rating/precio
+            valid = [h for h in data if isinstance(h.get("price_per_night"), (int, float)) and h["price_per_night"] > 0]
+            self._selected_hotel = (
+                max(valid, key=lambda x: (x.get("rating") or 0) / x["price_per_night"])
+                if valid else None
+            )
 
     def _call_llm(self) -> str:
         """
@@ -605,19 +559,13 @@ y devuelve el texto generado. Maneja errores de generación y decodificación.
             enc = self._tokenizer(text_input, return_tensors="pt").to(model_device)
 
             with torch.no_grad():
-                logger.info(f"Mensajes en historial: {len(self._messages)}")
-                logger.info(f"Tokens de entrada: {enc['input_ids'].shape[1]}")
-                start = time.perf_counter()
                 outputs = self._model.generate(
                     **enc,
                     max_new_tokens=self.max_new_tokens,
                     do_sample=False,
-                    use_cache=True,
                     pad_token_id=self._tokenizer.pad_token_id,
                     eos_token_id=self._tokenizer.eos_token_id,
                 )
-                elapsed = time.perf_counter() - start
-                logger.info(f"Generación LLM completada en {elapsed:.2f} s")
 
             gen = outputs[0][enc["input_ids"].shape[1]:]
             response = self._tokenizer.decode(gen, skip_special_tokens=True).strip()
