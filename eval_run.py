@@ -87,10 +87,10 @@ TEST_CASES = [
     # ── Caso 3: viaje en grupo ────────────────────────────────────────────────
     {
         "id": "TC03",
-        "description": "Viaje a Lisboa para 2 viajeros",
+        "description": "Viaje a Amsterdam para 2 viajeros",
         "request": {
             "origin": "Madrid",
-            "destination": "Lisboa",
+            "destination": "Amsterdam",
             "departure_date": "2026-11-20",
             "return_date": "2026-11-24",
             "travelers": 2,
@@ -100,12 +100,12 @@ TEST_CASES = [
     # ── Caso 4: destino de larga distancia ───────────────────────────────────
     {
         "id": "TC04",
-        "description": "Viaje intercontinental a Nueva York",
+        "description": "Viaje intercontinental a Chicago",
         "request": {
             "origin": "Madrid",
-            "destination": "Miami",
-            "departure_date": "2026-12-20",
-            "return_date": "2026-12-30",
+            "destination": "Chicago",
+            "departure_date": "2026-07-15",
+            "return_date": "2026-07-22",
             "travelers": 1,
             "budget": 2000.0,
         },
@@ -115,7 +115,7 @@ TEST_CASES = [
         "id": "TC05",
         "description": "Estancia larga en Berlín, presupuesto medio",
         "request": {
-            "origin": "Barcelona",
+            "origin": "Madrid",
             "destination": "Berlín",
             "departure_date": "2026-08-01", 
             "return_date": "2026-08-15",
@@ -288,7 +288,6 @@ def _print_aggregate(agg: dict):
         ("  Tasa errores tools",    f"{agg['avg_tool_error_rate']:.0%}"),
         ("── Calidad objetiva",     ""),
         ("  Completitud",           f"{agg['avg_completeness_score']:.0%}"),
-        ("  Coherencia fechas",     f"{agg['pct_date_coherence']:.0%}"),
         ("  Relevancia geográfica", f"{agg['pct_geo_relevance']:.0%}"),
         ("  Presupuesto respetado", f"{agg['pct_budget_respected']:.0%}"),
         ("  Rank vuelo",            f"{agg['avg_flight_rank_score']:.2f} / 1.00"),
