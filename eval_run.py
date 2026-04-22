@@ -32,7 +32,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from agent.travel_agent import TravelAgent
+from agent.travel_agent_metrics import TravelAgent
 from metrics import Evaluator, EvalResult
 
 # ---------------------------------------------------------------------------
@@ -141,6 +141,41 @@ def build_user_message(req: dict) -> str:
         msg += f" Presupuesto máximo: {req['budget']} €."
     return msg
 
+# ---------------------------------------------------------------------------
+# PERMITIR INTERACCIÓN CON EL USUARIO EVALUADOR
+# ---------------------------------------------------------------------------
+
+def run_human_conversation(agent, test_case: dict, eval_session, max_turns: int = 5) -> str:
+    """
+    Ejecuta una conversación completa con el agente en modo humano.
+    El evaluador responde manualmente cada vez que el agente pregunta.
+    Termina cuando el agente emite una Final Answer con tool calls reales.
+    """
+    # initial_message = test_case["input"]
+    initial_message = test_case
+    print(f"\n[USUARIO → AGENTE] {initial_message}")
+
+    result = agent.chat(initial_message, eval_session=eval_session)
+
+    if _has_real_tool_calls(eval_session):
+        return result
+
+    for turn in range(max_turns):
+        print(f"\n[AGENTE → USUARIO] {result}")
+        user_response = input("\n  Tu respuesta: ").strip()
+        result = agent.chat(user_response, eval_session=eval_session)
+
+        if _has_real_tool_calls(eval_session):
+            break
+
+    return result
+
+
+def _has_real_tool_calls(eval_session) -> bool:
+    """Comprueba si la sesión ya registró al menos una tool call real."""
+    # Ajusta según cómo EvalSession exponga sus datos internos
+    return getattr(eval_session, "tool_calls_count", 0) > 0
+
 
 # ---------------------------------------------------------------------------
 # RUNNER PRINCIPAL
@@ -191,7 +226,8 @@ def run_evaluation(
 
         try:
             with evaluator.session(req) as session:
-                agent.chat(user_message, eval_session=session)
+                # agent.chat(user_message, eval_session=session)
+                run_human_conversation(agent, user_message, eval_session=session)
 
             result: EvalResult = session.result
             results.append(result)

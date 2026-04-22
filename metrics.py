@@ -452,6 +452,10 @@ class EvalSession:
         self._selected_flight: dict | None = None
         self._selected_hotel: dict | None = None
 
+    @property
+    def tool_calls_count(self) -> int:
+        return len(self._observations)  # ajusta al nombre real del atributo interno
+
     def start(self):
         self._start_time = time.perf_counter()
 
