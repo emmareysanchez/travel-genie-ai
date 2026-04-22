@@ -263,17 +263,17 @@ Observation: [resultado de hoteles]
 
 Thought: El usuario no ha especificado tipo de transporte. Usaré las coordenadas del hotel devueltas por search_hotels y llamaré tres veces con drive, bicycle y walk.
 Action: search_airport_transport
-Action Input: {{"airport": "FCO", "hotel": {"latitude": 41.8956, "longitude": 12.5113}, "transport_type": "drive"}}
+# Action Input: {{"airport": "FCO", "hotel": {{"latitude": 41.8956, "longitude": 12.5113}}, "transport_type": "drive"}}
 Observation: [resultado de transporte en coche]
 
 Thought: Ahora consulto la opción en bicicleta.
 Action: search_airport_transport
-Action Input: {{"airport": "FCO", "hotel": {"latitude": 41.8956, "longitude": 12.5113}, "transport_type": "bicycle"}}
+# Action Input: {{"airport": "FCO", "hotel": {{"latitude": 41.8956, "longitude": 12.5113}}, "transport_type": "bicycle"}}
 Observation: [resultado de transporte en bicicleta]
 
 Thought: Ahora consulto la opción en transporte público.
 Action: search_airport_transport
-Action Input: {{"airport": "FCO", "hotel": {"latitude": 41.8956, "longitude": 12.5113}, "transport_type": "walk"}}
+Action Input: {{"airport": "FCO", "hotel": {{"latitude": 41.8956, "longitude": 12.5113}}, "transport_type": "walk"}}
 Observation: [resultado de transporte público]
 
 Thought: Ahora busco lugares de interés relevantes en Roma.
