@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import traceback
+import json
 
 from travel_agent import TravelAgent
 
@@ -28,6 +30,9 @@ def get_agent() -> TravelAgent:
     if agent is None:
         agent = TravelAgent()
     return agent
+
+def sse_event(data: dict) -> str:
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 class ChatRequest(BaseModel):
@@ -79,3 +84,49 @@ def chat(req: ChatRequest):
                 }
             ],
         }
+
+@app.post("/chat/stream")
+def chat_stream(req: ChatRequest):
+    def event_generator():
+        try:
+            travel_agent = get_agent()
+
+            if req.reset:
+                travel_agent.reset()
+                yield sse_event({
+                    "type": "reset",
+                    "content": "Conversation reset."
+                })
+                yield sse_event({
+                    "type": "done",
+                    "content": ""
+                })
+                return
+
+            for event in travel_agent.chat_stream(req.message):
+                yield sse_event(event)
+
+            yield sse_event({
+                "type": "done",
+                "content": ""
+            })
+
+        except Exception as e:
+            yield sse_event({
+                "type": "error",
+                "content": "".join(traceback.format_exception_only(type(e), e)).strip(),
+            })
+            yield sse_event({
+                "type": "done",
+                "content": ""
+            })
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

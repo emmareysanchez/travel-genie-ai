@@ -5,13 +5,80 @@ import ChatBubble from "@/components/ChatBubble";
 import SuggestedPrompts from "@/components/SuggestedPrompts";
 import TripInsightsPanel from "@/components/TripInsightsPanel";
 import genieLamp from "@/assets/genie-lamp.png";
-import type { Message, TraceEvent, ChatResponse } from "@/types/chat";
+import type { Message, TraceEvent } from "@/types/chat";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") || "";
 const buildApiUrl = (path: string) => `${API_BASE_URL}${path}`;
 
 const WELCOME_MESSAGE =
   "✨ Welcome, traveler! I'm your **Travel Genie** — your personal guide to discovering the world's most breathtaking destinations.\n\nAsk me anything about flights, hotels, itineraries, or hidden gems!";
+
+async function consumeSSEStream(
+  response: Response,
+  onEvent: (event: { type: string; content: string }) => void
+) {
+  if (!response.body) {
+    throw new Error("Streaming response has no body.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    const chunks = buffer.split("\n\n");
+    buffer = chunks.pop() ?? "";
+
+    for (const chunk of chunks) {
+      const lines = chunk
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+      const dataLines = lines
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.replace(/^data:\s?/, ""));
+
+      if (dataLines.length === 0) continue;
+
+      const raw = dataLines.join("\n");
+
+      try {
+        const parsed = JSON.parse(raw);
+        onEvent(parsed);
+      } catch (error) {
+        console.error("Error parsing SSE event:", raw, error);
+      }
+    }
+  }
+
+  if (buffer.trim()) {
+    const lines = buffer
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    const dataLines = lines
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.replace(/^data:\s?/, ""));
+
+    if (dataLines.length > 0) {
+      const raw = dataLines.join("\n");
+      try {
+        const parsed = JSON.parse(raw);
+        onEvent(parsed);
+      } catch (error) {
+        console.error("Error parsing last SSE event:", raw, error);
+      }
+    }
+  }
+}
 
 const Index = () => {
   const [messages, setMessages] = useState<Message[]>([
@@ -36,9 +103,15 @@ const Index = () => {
       <div className="flex items-center justify-center h-screen bg-background">
         <div className="glass-panel rounded-2xl p-8 max-w-md text-center space-y-3">
           <AlertCircle className="w-10 h-10 text-destructive mx-auto" />
-          <h2 className="font-display text-lg font-semibold text-foreground">Backend not configured</h2>
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            Backend not configured
+          </h2>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Set the <code className="text-primary font-mono text-xs bg-secondary/60 px-1.5 py-0.5 rounded">VITE_API_BASE_URL</code> environment variable to your backend URL and reload.
+            Set the{" "}
+            <code className="text-primary font-mono text-xs bg-secondary/60 px-1.5 py-0.5 rounded">
+              VITE_API_BASE_URL
+            </code>{" "}
+            environment variable to your backend URL and reload.
           </p>
         </div>
       </div>
@@ -53,9 +126,11 @@ const Index = () => {
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setInput("");
     setIsLoading(true);
+    setTrace([]);
+    setInsightsOpen(true);
 
     try {
-      const res = await fetch(buildApiUrl("/chat"), {
+      const res = await fetch(buildApiUrl("/chat/stream"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -63,15 +138,36 @@ const Index = () => {
         },
         body: JSON.stringify({ message: trimmed, reset: false }),
       });
-      if (!res.ok) throw new Error(`Server error (${res.status})`);
-      const data: ChatResponse = await res.json();
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: data.assistant_message },
-      ]);
-      if (data.trace?.length) {
-        setTrace(data.trace);
-        setInsightsOpen(true);
+
+      if (!res.ok) {
+        throw new Error(`Server error (${res.status})`);
+      }
+
+      let finalAnswer = "";
+
+      await consumeSSEStream(res, (event) => {
+        if (event.type === "done") return;
+
+        if (event.type === "error") {
+          setError(event.content || "Something went wrong. Please try again.");
+          setTrace((prev) => [...prev, event as TraceEvent]);
+          return;
+        }
+
+        if (event.type === "final_answer") {
+          finalAnswer = event.content;
+          setTrace((prev) => [...prev, event as TraceEvent]);
+          return;
+        }
+
+        setTrace((prev) => [...prev, event as TraceEvent]);
+      });
+
+      if (finalAnswer) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: finalAnswer },
+        ]);
       }
     } catch (err: any) {
       setError(err.message || "Something went wrong. Please try again.");
@@ -92,6 +188,7 @@ const Index = () => {
         body: JSON.stringify({ message: "", reset: true }),
       });
     } catch {}
+
     setMessages([{ role: "assistant", content: WELCOME_MESSAGE }]);
     setTrace([]);
     setError(null);
@@ -109,13 +206,11 @@ const Index = () => {
 
   return (
     <div className="flex flex-col h-screen bg-background relative overflow-hidden">
-      {/* Ambient background glow */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-primary/[0.03] blur-[120px]" />
         <div className="absolute bottom-[-20%] right-[-10%] w-[40%] h-[40%] rounded-full bg-primary/[0.04] blur-[100px]" />
       </div>
 
-      {/* Header */}
       <header className="relative z-10 flex items-center justify-between px-6 py-4 border-b border-border/60 glass-panel">
         <div className="flex items-center gap-3.5">
           <motion.img
@@ -147,7 +242,6 @@ const Index = () => {
         </button>
       </header>
 
-      {/* Messages */}
       <main className="flex-1 overflow-y-auto px-4 sm:px-6 py-8 relative z-10">
         <div className="max-w-2xl mx-auto space-y-6">
           <AnimatePresence>
@@ -194,7 +288,6 @@ const Index = () => {
         </div>
       </main>
 
-      {/* Input */}
       <div className="relative z-10 border-t border-border/60 glass-panel px-4 sm:px-6 py-4">
         <div className="max-w-2xl mx-auto flex gap-3">
           <input
@@ -217,7 +310,6 @@ const Index = () => {
         </div>
       </div>
 
-      {/* Agent Activity Panel */}
       <TripInsightsPanel
         isOpen={insightsOpen}
         onToggle={() => setInsightsOpen(!insightsOpen)}
