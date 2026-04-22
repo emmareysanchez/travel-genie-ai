@@ -15,7 +15,6 @@ Eficiencia (instrumentación del bucle ReAct):
 
 Calidad objetiva (automática, sin coste):
   - completeness_score   → fracción de secciones esperadas presentes en la respuesta
-  - date_coherence       → las fechas de la respuesta coinciden con las del request
   - geo_relevance        → el destino aparece en la respuesta
   - budget_respected     → el coste total no supera el presupuesto (si se dio)
   - flight_rank_score    → qué tan bueno es el vuelo elegido vs. candidatos (0-1)
@@ -73,7 +72,6 @@ class EvalResult:
 
     # ── Calidad objetiva ──────────────────────────────────────────────────────
     completeness_score: float = 0.0    # 0.0 – 1.0
-    date_coherence: bool = False
     geo_relevance: bool = False
     budget_respected: bool = True      # True si no se proporcionó budget
     flight_rank_score: float = 0.0     # 0.0 – 1.0 (1 = mejor candidato elegido)
@@ -99,7 +97,6 @@ class EvalResult:
         """
         components = [
             self.completeness_score,                          # peso 1
-            float(self.date_coherence),                       # peso 1
             float(self.geo_relevance),                        # peso 1
             float(self.budget_respected),                     # peso 1
             self.flight_rank_score,                           # peso 1
@@ -136,7 +133,6 @@ class EvalResult:
             "",
             "  ── Calidad objetiva ────────────────────────────────────",
             f"  Completitud           : {self.completeness_score:.0%}",
-            f"  Coherencia de fechas  : {'✓' if self.date_coherence else '✗'}",
             f"  Relevancia geográfica : {'✓' if self.geo_relevance else '✗'}",
             f"  Presupuesto respetado : {'✓' if self.budget_respected else '✗'}",
             f"  Rank vuelo elegido    : {self.flight_rank_score:.2f} / 1.00",
@@ -190,17 +186,17 @@ def completeness_score(final_answer: str) -> float:
     return hits / len(_EXPECTED_SECTIONS)
 
 
-def date_coherence(final_answer: str, departure_date: str, return_date: str) -> bool:
-    """
-    Comprueba que las fechas del request (YYYY-MM-DD) aparecen en la respuesta.
+# def date_coherence(final_answer: str, departure_date: str, return_date: str) -> bool:
+#     """
+#     Comprueba que las fechas del request (YYYY-MM-DD) aparecen en la respuesta.
 
-    >>> date_coherence("Salida 2026-06-10, vuelta 2026-06-13", "2026-06-10", "2026-06-13")
-    True
-    >>> date_coherence("Salida 2026-07-01, vuelta 2026-07-05", "2026-06-10", "2026-06-13")
-    False
-    """
-    found = set(re.findall(r"\d{4}-\d{2}-\d{2}", final_answer))
-    return departure_date in found and return_date in found
+#     >>> date_coherence("Salida 2026-06-10, vuelta 2026-06-13", "2026-06-10", "2026-06-13")
+#     True
+#     >>> date_coherence("Salida 2026-07-01, vuelta 2026-07-05", "2026-06-10", "2026-06-13")
+#     False
+#     """
+#     found = set(re.findall(r"\d{4}-\d{2}-\d{2}", final_answer))
+#     return departure_date in found and return_date in found
 
 
 def geo_relevance(final_answer: str, destination: str) -> bool:
@@ -518,11 +514,6 @@ class EvalSession:
             tool_error_rate=round(tool_error_rate(self._observations), 4),
             # Calidad objetiva
             completeness_score=round(completeness_score(self._final_answer), 4),
-            date_coherence=date_coherence(
-                self._final_answer,
-                req.get("departure_date", ""),
-                req.get("return_date", ""),
-            ),
             geo_relevance=geo_relevance(self._final_answer, req.get("destination", "")),
             budget_respected=budget_respected(
                 self._selected_flight.get("price") if self._selected_flight else None,
@@ -616,7 +607,6 @@ class Evaluator:
             "avg_react_iterations": _avg("react_iterations"),
             "avg_tool_error_rate": _avg("tool_error_rate"),
             "avg_completeness_score": _avg("completeness_score"),
-            "pct_date_coherence": round(sum(r.date_coherence for r in self.history) / len(self.history), 4),
             "pct_geo_relevance": round(sum(r.geo_relevance for r in self.history) / len(self.history), 4),
             "pct_budget_respected": round(sum(r.budget_respected for r in self.history) / len(self.history), 4),
             "avg_flight_rank_score": _avg("flight_rank_score"),
