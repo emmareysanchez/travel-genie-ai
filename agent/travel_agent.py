@@ -82,35 +82,18 @@ TOOLS: list[Tool] = [
         },
         callable=search_hotels,
     ),
-    
-    # Tool(
-    #     name="search_airport_transport",
-    #     description=(
-    #         "Calcula una ruta entre el aeropuerto de llegada y la dirección del hotel. "
-    #         "Devuelve distancia y duración estimadas para un modo de transporte concreto. "
-    #         "Si el usuario no especifica un tipo de transporte, llama esta función TRES VECES "
-    #         "con los modos 'drive', 'bicycle' y 'transit' respectivamente, y presenta las tres opciones."
-    #     ),
-    #     parameters={
-    #         "airport": "string — código IATA del aeropuerto (ej: BCN, MAD, JFK)",
-    #         "hotel": "string — dirección completa del hotel (calle, número, ciudad, país)",
-    #         "transport_type": "string (opcional, default 'drive') — modo de transporte: drive, bicycle, transit",
-    #     },
-    #     callable=get_airport_to_hotel_transport,
-    # ),
-# YO ESTA TOOL LA TENIA COMENTADA POR ESO ESTA ASI ARRIBA
     Tool(
         name="search_airport_transport",
         description=(
             "Calcula una ruta entre el aeropuerto de llegada y el hotel. "
             "Devuelve distancia y duración estimadas para un modo de transporte concreto. "
             "Si el usuario no especifica un tipo de transporte, llama esta función TRES VECES "
-            "con los modos 'drive', 'bicycle' y 'transit' respectivamente, y presenta las tres opciones."
+            "con los modos 'drive', 'bicycle' y 'approximate_transit' respectivamente, y presenta las tres opciones."
         ),
         parameters={
             "airport": "string — código IATA del aeropuerto (ej: BCN, MAD, JFK)",
             "hotel": "dict — coordenadas del hotel con las claves 'latitude' (float) y 'longitude' (float). Ejemplo: {\"latitude\": 41.3851, \"longitude\": 2.1734}. Usa los valores de 'latitude' y 'longitude' devueltos por search_hotels.",
-            "transport_type": "string (opcional, default 'drive') — modo de transporte: drive, bicycle, transit",
+            "transport_type": "string (opcional, default 'drive') — modo de transporte: drive, bicycle, approximate_transit",
         },
         callable=get_airport_to_hotel_transport,
     ),
@@ -197,14 +180,14 @@ Final Answer: <respuesta completa, clara y bien formateada para el usuario>
      usando los valores numéricos devueltos por search_hotels. Ejemplo: {{"latitude": 41.3851, "longitude": 2.1734}}
    - El tercer parámetro ("transport_type") es el método de transporte deseado.
    - Si el usuario NO especifica un tipo de transporte, llama a search_airport_transport TRES VECES:
-     primero con transport_type "drive", luego con "bicycle" y finalmente con "transit".
+     primero con transport_type "drive", luego con "bicycle" y finalmente con "approximate_transit".
      Después presenta las tres opciones al usuario para que elija la que prefiera.
    - Si el usuario SÍ especifica un tipo de transporte, realiza solo esa llamada.
 8. Llama a suggest_food_web con el nombre de la ciudad destino en inglés y en minúsculas para obtener el enlace de gastronomía local. Inclúyelo siempre en la respuesta final.
 9. Cuando ya tengas toda la información, devuelve una respuesta final clara con la mejor combinación encontrada.
     - mejor opción de vuelo
     - opción de hotel recomendada
-    - opción de transporte recomendada (si el usuario no especificó preferencia, elige la más rápida entre drive, bicycle y transit)
+    - opción de transporte recomendada (si el usuario no especificó preferencia, elige la más rápida entre drive, bicycle y approximate_transit)
     - 3 a 5 lugares de interés sugeridos
     - enlace de gastronomía local (TasteAtlas)
 
@@ -224,7 +207,7 @@ Action: search_hotels
 Action Input: {{"destination": "Roma", "check_in": "2026-06-15", "check_out": "2026-06-20", "guests": 1}}
 Observation: [resultado de hoteles]
 
-Thought: El usuario no ha especificado tipo de transporte. Usaré las coordenadas del hotel devueltas por search_hotels y llamaré tres veces con drive, bicycle y transit.
+Thought: El usuario no ha especificado tipo de transporte. Usaré las coordenadas del hotel devueltas por search_hotels y llamaré tres veces con drive, bicycle y approximate_transit.
 Action: search_airport_transport
 Action Input: {{"airport": "FCO", "hotel": {{"latitude": 41.8956, "longitude": 12.5113}}, "transport_type": "drive"}}
 Observation: [resultado de transporte en coche]
@@ -236,7 +219,7 @@ Observation: [resultado de transporte en bicicleta]
 
 Thought: Ahora consulto la opción en transporte público.
 Action: search_airport_transport
-Action Input: {{"airport": "FCO", "hotel": {{"latitude": 41.8956, "longitude": 12.5113}}, "transport_type": "transit"}}
+Action Input: {{"airport": "FCO", "hotel": {{"latitude": 41.8956, "longitude": 12.5113}}, "transport_type": "approximate_transit"}}
 Observation: [resultado de transporte público]
 
 Thought: Ahora busco lugares de interés cerca del centro de Roma.
@@ -453,7 +436,7 @@ class TravelAgent:
 
     # model_id: str = "google/gemma-4-E4B-it"
     model_id: str = "Qwen/Qwen2.5-3B-Instruct" # "google/gemma-4-E4B-it"
-    max_iterations: int = 6 # vuelos(1) + hotel(1) + transporte×3(3) + razonamiento intermedio
+    max_iterations: int = 12 # 6 # vuelos(1) + hotel(1) + transporte×3(3) + razonamiento intermedio
     temperature: float = 0.2
     max_new_tokens: int = 220 # 400 # 1000 / 512
 
