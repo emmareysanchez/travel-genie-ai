@@ -168,16 +168,14 @@ Final Answer: <respuesta completa, clara y bien formateada para el usuario>
 
 ## Reglas importantes
 
-## Reglas importantes
-
 1. NUNCA inventes datos de vuelos, hoteles o transporte. Usa siempre las tools cuando necesites información externa.
 2. Usa exactamente los nombres de tools indicados.
 3. El JSON de Action Input debe ser válido. Usa comillas dobles.
 4. Si faltan datos clave para hacer una búsqueda útil, NO llames todavía a tools. Haz primero una pregunta breve y útil al usuario.
 5. Haz solo UNA pregunta por turno. No hagas listas largas de preguntas.
-6. Intenta aclarar de forma progresiva estas preferencias solo si faltan o son relevantes:
+6. Intenta aclarar de forma progresiva estas preferencias:
    - presupuesto aproximado
-   - si prefiere vuelos directos o más baratos
+   - si prefiere vuelos directos / más baratos / más cortos
    - tipo de alojamiento o zona deseada
    - intereses principales del viaje
 7. Si el usuario ya ha dado suficiente información, no preguntes más y pasa a usar las tools. Busca primero vuelos, luego hotel y después transporte.
@@ -449,6 +447,26 @@ def _compact_result(result):
 
     return result
 
+def sanitize_action_input(tool: Tool, params: dict) -> dict:
+    if not isinstance(params, dict):
+        return {}
+
+    allowed = set(tool.parameters.keys())
+
+    alias_map = {
+        "checkinDate": "check_in",
+        "checkoutDate": "check_out",
+        "adults": "guests",
+    }
+
+    cleaned = {}
+    for key, value in params.items():
+        normalized_key = alias_map.get(key, key)
+        if normalized_key in allowed:
+            cleaned[normalized_key] = value
+
+    return cleaned
+
 def execute_tool(step: ReActStep) -> str:
     """
     Despacha la tool indicada en el step y devuelve la observación como string.
@@ -460,8 +478,11 @@ def execute_tool(step: ReActStep) -> str:
     if tool is None:
         return f"[ERROR] Tool desconocida: '{tool_name}'. Tools disponibles: {list(TOOL_MAP.keys())}"
 
-    params = step.action_input or {}
-    logger.info(f"Ejecutando tool '{tool_name}' con params: {params}")
+    raw_params = step.action_input or {}
+    params = sanitize_action_input(tool, raw_params)
+
+    logger.info(f"Ejecutando tool '{tool_name}' con params raw: {raw_params}")
+    logger.info(f"Ejecutando tool '{tool_name}' con params cleaned: {params}")
 
     try:
         result = tool.callable(**params)
