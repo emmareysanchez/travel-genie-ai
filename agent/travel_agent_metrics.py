@@ -107,7 +107,7 @@ TOOLS: list[Tool] = [
             "hotel y lugares de interés."
         ),
         parameters={
-            "city": "string — nombre de la ciudad de destino en inglés y en minúsculas (ej: rome, barcelona, paris)",
+            "city": "string — nombre de la ciudad de destino en inglés y en minúsculas (ej: rome, london, lisbon)",
         },
         callable=suggest_food_web,
     ),
@@ -640,7 +640,7 @@ class TravelAgent:
 
                 observation = execute_tool(step)
 
-                logger.info(f"Observation ({step.action}): {observation[:200]}...")
+                logger.info(f"Observation ({step.action}): {observation[:512]}...")
                 # ── Métrica: registrar tool call ──────────────────────────────────
                 if eval_session:
                     eval_session.record_tool_call(observation)
