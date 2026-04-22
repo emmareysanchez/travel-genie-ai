@@ -610,7 +610,7 @@ class TravelAgent:
                 })
 
                 observation = execute_tool(step)
-                logger.info(f"Observation ({step.action}): {observation[:200]}...")
+                logger.info(f"Observation ({step.action}): {observation[:512]}...")
 
                 trace.append({
                     "type": "observation",
