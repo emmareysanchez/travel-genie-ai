@@ -36,7 +36,7 @@ def _get_destination_id(destination: str) -> str | None:
         f"{BASE_URL}/auto-complete",
         {"query": destination},
     )
-    logger.info(f"auto-complete response: {data}")
+    # logger.info(f"auto-complete response: {data}")
 
     results = data.get("data", [])
     if not results:
@@ -65,34 +65,30 @@ def search_hotels(destination, check_in, check_out, guests=1) -> list:
     )
 
     logger.info(f"search response keys: {list(data.keys())}")
-    logger.info(f"THIS IS DATA: {data}")
     hotels_raw = data.get("data", [])
 
     results = []
     for h in hotels_raw:
-        try:
-            name = h["name"]
-            raw_address = h.get("address", "")
-            logger.info(f"Procesando hotel: {name} con dirección: {raw_address}")
-            geocodable_address = ", ".join(
-                part.strip()
-                for part in [name, raw_address, destination]
-                if isinstance(part, str) and part.strip()
-            )
-
+        if "latitude" not in h or "longitude" not in h:
+            # logger.warning(f"Hotel sin coordenadas, omitido: {h.get('name', 'desconocido')}")
+            continue
+        try: 
             results.append({
-                "name": name,
+                "name": h["name"],
                 "destination": destination,
                 "price_per_night": h["priceBreakdown"]["grossPrice"]["value"],
                 "rating": h.get("reviewScore", 0),
-                "address": geocodable_address,
+                "latitude": h["latitude"],
+                "longitude": h["longitude"],
             })
         except (KeyError, TypeError) as e:
             logger.warning(f"Error parseando hotel: {e} — {h}")
             continue
 
     logger.info(f"Hoteles encontrados: {len(results)}")
+    logger.debug(f"Hoteles detallados: {results}")
     return results
+
 
 
 def select_best_hotel(hotels: list) -> dict | None:
