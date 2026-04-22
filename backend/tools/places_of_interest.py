@@ -89,6 +89,30 @@ INTEREST_TYPE_MAP: dict[str, str] = {
     "oficina_turismo":  "tourism.information.office",
 }
 
+INTEREST_TYPE_ALIASES: dict[str, str] = {
+    "restaurant": "restaurantes",
+    "restaurants": "restaurantes",
+    "cafe": "cafes",
+    "cafes": "cafes",
+    "bar": "bares",
+    "bars": "bares",
+    "museum": "museos",
+    "museums": "museos",
+    "monument": "monumentos",
+    "monuments": "monumentos",
+    "park": "parques",
+    "parks": "parques",
+    "nightlife": "vida_nocturna",
+    "transport": "transporte",
+    "theatre": "teatro",
+    "theater": "teatro",
+    "art": "arte",
+    "culture": "cultura",
+    "zoo": "zoologico",
+    "beach": "playas",
+    "beaches": "playas",
+}
+
 # Condiciones válidas admitidas por la API (subconjunto más útil para viajeros)
 VALID_CONDITIONS: frozenset[str] = frozenset({
     "wheelchair",
@@ -185,6 +209,9 @@ def _resolve_coordinates(location: str) -> tuple[float, float]:
         return coords
     return _geocode_location(location)
 
+def _normalize_interest_type_name(name: str) -> str:
+    normalized = name.strip().lower()
+    return INTEREST_TYPE_ALIASES.get(normalized, normalized)
 
 def _build_categories(interest_types: list[str]) -> str:
     """
@@ -196,7 +223,7 @@ def _build_categories(interest_types: list[str]) -> str:
     unknown: list[str] = []
 
     for itype in interest_types:
-        normalized = itype.strip().lower()
+        normalized = _normalize_interest_type_name(itype)
         if normalized in INTEREST_TYPE_MAP:
             categories.append(INTEREST_TYPE_MAP[normalized])
         elif "." in normalized:

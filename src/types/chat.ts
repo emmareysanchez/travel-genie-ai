@@ -4,7 +4,7 @@ export interface Message {
 }
 
 export interface TraceEvent {
-  type: "status" | "thought" | "action" | "observation" | "warning" | "error" | "final_answer";
+  type: "status" | "thought" | "action" | "observation" | "warning" | "error" | "final_answer" | "reset" | "done";
   content: string;
 }
 

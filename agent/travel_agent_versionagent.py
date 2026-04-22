@@ -180,8 +180,6 @@ Final Answer: <respuesta completa, clara y bien formateada para el usuario>
    - intereses principales del viaje
 7. Si el usuario ya ha dado suficiente información, no preguntes más y pasa a usar las tools. Busca primero vuelos, luego hotel y después transporte.
 8. Si el usuario proporciona fecha de vuelta, úsala en `search_flights` como `return_date`.
-9. Para `search_places_of_interest`, aunque `lang` sea `"en"`, los valores de `interest_types` deben ir en el esquema de categorías definido por la tool, preferentemente en español
-(por ejemplo `"restaurantes"`, `"museos"`, `"bares"`), o usando categorías raw de Geoapify como `"catering.restaurant"`. No uses `"restaurants"` como `interest_types`.
 9. Para llamar a `search_airport_transport`:
    - El primer parámetro (`"airport"`) debe ser el código IATA del aeropuerto (3 letras, ej: FCO, BCN, MAD).
    - El segundo parámetro (`"hotel"`) debe ser un diccionario JSON con las claves `"latitude"` y `"longitude"` usando los valores numéricos devueltos por `search_hotels`. Ejemplo: `{{"latitude": 41.3851, "longitude": 2.1734}}`
@@ -225,10 +223,10 @@ Alternativa:
 - aerolínea, horario principal, precio y escalas
 
 Hotel recomendado:
-- nombre, zona o dirección, precio y valoración
+- nombre, zona o dirección, precio por noche y valoración
 
 Alternativa:
-- nombre, zona o dirección, precio y valoración
+- nombre, zona o dirección, precio por noche y valoración
 
 Transporte recomendado desde el aeropuerto:
 - tipo de transporte, duración y distancia
@@ -408,14 +406,13 @@ def _compact_result(result):
                     "duration",
                     "stops",
                     "name",
+                    "price_per_night",
                     "rating",
                     "address",
                     "distance_meters",
                     "categories",
                     "duration_formatted",
                     "transport_type",
-                    "latitude",
-                    "longitude",
                 ]
                 if k in item
             })
@@ -437,7 +434,7 @@ def _compact_result(result):
                 "duration",
                 "stops",
                 "name",
-                "price",
+                "price_per_night",
                 "rating",
                 "address",
                 "distance_meters",
@@ -521,7 +518,7 @@ class TravelAgent:
     model_id: str = "Qwen/Qwen2.5-3B-Instruct" # "google/gemma-4-E4B-it"
     max_iterations: int = 12 # 6 # vuelos(1) + hotel(1) + transporte×3(3) + razonamiento intermedio
     temperature: float = 0.2
-    max_new_tokens: int = 370 # 400 # 1000 / 512
+    max_new_tokens: int = 220 # 400 # 1000 / 512
 
     _messages: list[dict] = field(default_factory=list, init=False)
     _tokenizer: Any = field(default=None, init=False)
@@ -613,7 +610,7 @@ class TravelAgent:
                 })
 
                 observation = execute_tool(step)
-                logger.info(f"Observation ({step.action}): {observation[:512]}...")
+                logger.info(f"Observation ({step.action}): {observation[:200]}...")
 
                 trace.append({
                     "type": "observation",
@@ -628,14 +625,6 @@ class TravelAgent:
                         "\nSi el error es de parámetros, corrige Action Input. "
                         "Si falta información del usuario, pregúntala antes de seguir."
                     )
-
-                    if "Tipos de interés no reconocidos" in observation:
-                        extra_note += (
-                            "\nEn search_places_of_interest, interest_types debe usar etiquetas del esquema "
-                            "en español como 'restaurantes', 'museos' o 'bares', "
-                            "o categorías raw Geoapify como 'catering.restaurant'. "
-                            "No uses 'restaurants'."
-                        )
 
                 self._messages.append({
                     "role": "user",
@@ -673,93 +662,6 @@ class TravelAgent:
             "trace": trace
         }
 
-
-    def chat_stream(self, user_message: str):
-        logger.info(f"Usuario (stream): {user_message}")
-        self._messages.append({"role": "user", "content": user_message})
-
-        for iteration in range(1, self.max_iterations + 1):
-            logger.info(f"--- Iteración ReAct STREAM {iteration}/{self.max_iterations} ---")
-
-            yield {
-                "type": "status",
-                "content": f"Iteración {iteration}/{self.max_iterations}"
-            }
-
-            llm_response = self._call_llm()
-            step = parse_react_response(llm_response)
-
-            if step.thought:
-                logger.info(f"Thought: {step.thought[:500]}...")
-                yield {
-                    "type": "thought",
-                    "content": step.thought
-                }
-
-            if step.final_answer:
-                logger.info("Final Answer recibida. Fin del bucle ReAct STREAM.")
-                self._messages.append({"role": "assistant", "content": llm_response})
-
-                yield {
-                    "type": "final_answer",
-                    "content": step.final_answer
-                }
-                return
-
-            if step.action:
-                yield {
-                    "type": "action",
-                    "content": f"{step.action} | input={json.dumps(step.action_input or {}, ensure_ascii=False)}"
-                }
-
-                observation = execute_tool(step)
-                logger.info(f"Observation ({step.action}): {observation[:200]}...")
-
-                yield {
-                    "type": "observation",
-                    "content": observation[:1000]
-                }
-
-                self._messages.append({"role": "assistant", "content": llm_response})
-
-                extra_note = ""
-                if isinstance(observation, str) and observation.startswith("[ERROR]"):
-                    extra_note = (
-                        "\nSi el error es de parámetros, corrige Action Input. "
-                        "Si falta información del usuario, pregúntala antes de seguir."
-                    )
-
-                self._messages.append({
-                    "role": "user",
-                    "content": f"Observation: {observation}{extra_note}"
-                })
-            else:
-                logger.warning("No se detectó Action ni Final Answer en STREAM. Pidiendo al LLM que continúe.")
-                yield {
-                    "type": "warning",
-                    "content": "El modelo no devolvió Action ni Final Answer."
-                }
-
-                self._messages.append({"role": "assistant", "content": llm_response})
-                self._messages.append({
-                    "role": "user",
-                    "content": (
-                        "Continúa con el siguiente paso del plan de viaje. "
-                        "Recuerda usar el formato Thought/Action/Action Input o Final Answer."
-                    )
-                })
-
-        fallback = (
-            "Lo siento, no he podido completar la planificación del viaje en el número "
-            "máximo de pasos. Por favor, intenta con una consulta más específica."
-        )
-        logger.error("max_iterations alcanzado sin Final Answer en STREAM.")
-
-        yield {
-            "type": "error",
-            "content": fallback
-        }
-        
     def reset(self):
         """Reinicia el historial de conversación manteniendo el system prompt."""
         self._messages = [self._messages[0]]
