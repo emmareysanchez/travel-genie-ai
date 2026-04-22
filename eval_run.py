@@ -61,12 +61,12 @@ TEST_CASES = [
     # ── Caso 1: viaje estándar europeo, sin presupuesto ──────────────────────
     {
         "id": "TC01",
-        "description": "Viaje corto a París, 1 viajero, sin presupuesto",
+        "description": "Viaje corto a Budapest, 1 viajero, sin presupuesto",
         "request": {
             "origin": "Madrid",
-            "destination": "París",
+            "destination": "Budapest",
             "departure_date": "2026-09-10",
-            "return_date": "2026-09-13",
+            "return_date": "2026-09-15",
             "travelers": 1,
             "budget": None,
         },
@@ -74,10 +74,10 @@ TEST_CASES = [
     # ── Caso 2: viaje con presupuesto ajustado ────────────────────────────────
     {
         "id": "TC02",
-        "description": "Viaje a Roma con presupuesto de 500 €",
+        "description": "Viaje a Milán con presupuesto de 500 €",
         "request": {
             "origin": "Madrid",
-            "destination": "Roma",
+            "destination": "Milán",
             "departure_date": "2026-10-05",
             "return_date": "2026-10-10",
             "travelers": 1,
@@ -103,7 +103,7 @@ TEST_CASES = [
         "description": "Viaje intercontinental a Nueva York",
         "request": {
             "origin": "Madrid",
-            "destination": "Nueva York",
+            "destination": "Miami",
             "departure_date": "2026-12-20",
             "return_date": "2026-12-30",
             "travelers": 1,
@@ -117,7 +117,7 @@ TEST_CASES = [
         "request": {
             "origin": "Barcelona",
             "destination": "Berlín",
-            "departure_date": "2026-08-01",
+            "departure_date": "2026-08-01", 
             "return_date": "2026-08-15",
             "travelers": 1,
             "budget": 1200.0,
@@ -135,7 +135,7 @@ def build_user_message(req: dict) -> str:
     msg = (
         f"Planifica un viaje de {req['origin']} a {req['destination']} "
         f"del {req['departure_date']} al {req['return_date']} "
-        f"para {req.get('travelers', 1)} viajero/s."
+        f"para {req.get('travelers', 1)} persona" + ("s" if req.get("travelers", 1) > 1 else "") + "."
     )
     if req.get("budget"):
         msg += f" Presupuesto máximo: {req['budget']} €."
