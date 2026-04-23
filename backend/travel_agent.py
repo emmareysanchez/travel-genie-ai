@@ -72,7 +72,7 @@ TOOLS: list[Tool] = [
         name="search_hotels",
         description=(
             "Busca hoteles disponibles en una ciudad para un rango de fechas. "
-            "Devuelve opciones con nombre, rating, dirección geocodable y precio."
+            "Devuelve opciones con nombre, rating, dirección geocodable y precio en total."
         ),
         parameters={
             "destination": "string — ciudad de destino (ej: Barcelona)",
@@ -218,17 +218,23 @@ La respuesta final debe seguir este estilo:
 
 Final Answer: Aquí va mi recomendación para tu viaje:
 
-Vuelo recomendado:
+Vuelo de ida recomendado:
 - aerolínea, horario principal, precio y escalas
 
 Alternativa:
 - aerolínea, horario principal, precio y escalas
+
+Vuelo de vuelta recomendado:
+- aerolínea, horario de salida y llegada, precio y escalas
+
+Alternativa:
+- aerolínea, horario de salida y llegada, precio y escalas
 
 Hotel recomendado:
-- nombre, zona o dirección, precio y valoración
+- nombre, zona o dirección, precio en total y valoración
 
 Alternativa:
-- nombre, zona o dirección, precio y valoración
+- nombre, zona o dirección, precio en total y valoración
 
 Transporte recomendado desde el aeropuerto:
 - tipo de transporte, duración y distancia
@@ -404,6 +410,7 @@ def _compact_result(result):
                     "departure_time",
                     "arrival_time",
                     "price",
+                    "price_per_night",
                     "arrival_airport",
                     "duration",
                     "stops",
@@ -521,7 +528,7 @@ class TravelAgent:
     model_id: str = "Qwen/Qwen2.5-3B-Instruct" # "google/gemma-4-E4B-it"
     max_iterations: int = 12 # 6 # vuelos(1) + hotel(1) + transporte×3(3) + razonamiento intermedio
     temperature: float = 0.2
-    max_new_tokens: int = 370 # 400 # 1000 / 512
+    max_new_tokens: int = 1000 # 512 # 370 # 400 # 1000 / 512
 
     _messages: list[dict] = field(default_factory=list, init=False)
     _tokenizer: Any = field(default=None, init=False)
@@ -791,7 +798,7 @@ y devuelve el texto generado. Maneja errores de generación y decodificación.
                 outputs = self._model.generate(
                     **enc,
                     max_new_tokens=self.max_new_tokens,
-                    do_sample=False,
+                    do_sample=True,
                     use_cache=True,
                     pad_token_id=self._tokenizer.pad_token_id,
                     eos_token_id=self._tokenizer.eos_token_id,

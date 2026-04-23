@@ -76,7 +76,7 @@ def search_hotels(destination, check_in, check_out, guests=1) -> list:
             results.append({
                 "name": h["name"],
                 "destination": destination,
-                "price_per_night": h["priceBreakdown"]["grossPrice"]["value"],
+                "price": h["priceBreakdown"]["grossPrice"]["value"],
                 "rating": h.get("reviewScore", 0),
                 "latitude": h["latitude"],
                 "longitude": h["longitude"],
@@ -94,12 +94,12 @@ def search_hotels(destination, check_in, check_out, guests=1) -> list:
 def select_best_hotel(hotels: list) -> dict | None:
     valid_hotels = [
         h for h in hotels
-        if isinstance(h.get("price_per_night"), (int, float)) and h["price_per_night"] > 0
+        if isinstance(h.get("price"), (int, float)) and h["price"] > 0
     ]
     if not valid_hotels:
         return None
 
-    return max(valid_hotels, key=lambda x: (x.get("rating", 0) or 0) / x["price_per_night"])
+    return max(valid_hotels, key=lambda x: (x.get("rating", 0) or 0) / x["price"])
 
 
 if __name__ == "__main__":
